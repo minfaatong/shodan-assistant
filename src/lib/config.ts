@@ -1,15 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { homedir } from 'node:os';
 import { env } from 'node:process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SKILL_DIR = resolve(__dirname, '..', '..');
+const PKG_DIR = resolve(__dirname, '..', '..');
 
 export const PATHS = {
-  SAY_SH: resolve(homedir(), '.qclaw/skills/isabella-tts/scripts/say.sh'),
-  LISTEN_SH: resolve(SKILL_DIR, 'scripts', 'listen_stream.sh'),
+  SAY_SH: resolve(PKG_DIR, 'scripts', 'say.sh'),
+  LISTEN_SH: resolve(PKG_DIR, 'scripts', 'listen_stream.sh'),
   BEEP_START: '/tmp/beep_start.wav',
   BEEP_END: '/tmp/beep_end.wav',
   QUICK_DIR: '/tmp/shodan_quick',

@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 
 import React from 'react';
 import { render } from 'ink';
@@ -20,7 +20,7 @@ if (values.help) {
   console.log(`
 shodan-assistant — Voice AI Agent with Terminal UI
 
-Usage: tsx src/index.tsx [options]
+Usage: shodan [options]
 
 Options:
   --intro TEXT     Override startup greeting
