@@ -41,7 +41,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const [inputMode, setInputMode] = useState<InputMode>({ type: 'none' });
   const [chatScrollOffset, setChatScrollOffset] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [textBuffer, setTextBuffer] = useState('');
   const [textCursor, setTextCursor] = useState(0);
   const inputRef = useRef({ buffer: '', cursor: 0 });
@@ -49,8 +48,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const showFeedback = useCallback((msg: string) => {
     setFeedbackMsg(msg);
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => setFeedbackMsg(null), 5000);
   }, []);
 
   useEffect(() => {
@@ -68,7 +65,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
     return () => {
       ctrlRef.current?.shutdown();
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     };
   }, []);
 
@@ -203,6 +199,10 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
     if (key.escape) {
+      if (feedbackMsg) {
+        setFeedbackMsg(null);
+        return;
+      }
       inputRef.current = { buffer: '', cursor: 0 };
       setTextBuffer('');
       setTextCursor(0);
@@ -236,6 +236,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
     if (input) {
+      if (feedbackMsg) setFeedbackMsg(null);
       const { buffer, cursor } = inputRef.current;
       const nextBuf = buffer.slice(0, cursor) + input + buffer.slice(cursor);
       inputRef.current = { buffer: nextBuf, cursor: cursor + 1 };
@@ -317,14 +318,13 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
           <Text color="white"> {textBuffer.slice(0, textCursor)}</Text>
           <Text color="yellow">█</Text>
           <Text color="white">{textBuffer.slice(textCursor)}</Text>
-          <Text>{' '.repeat(Math.max(0, cols - 4 - textBuffer.length))}</Text>
         </Text>
         <Text backgroundColor="#1c1c1c" color="gray" dimColor>
-          {'  Ctrl+C quit | /help commands'.padEnd(cols - 2)}
+          {'  Ctrl+C quit | /help commands'}
         </Text>
         {feedbackMsg && feedbackMsg.split('\n').map((line, i) => (
           <Text key={i} backgroundColor="#1c1c1c" color="green">
-            {'  '}{line.padEnd(cols - 4)}
+            {'  '}{line}
           </Text>
         ))}
       </Box>
