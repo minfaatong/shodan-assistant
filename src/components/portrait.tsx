@@ -37,24 +37,9 @@ const PORTRAIT = [
   '##%@@@%@%#@%*%@@@@##@*%@@@@#%%#@@@@%*%@##@%%@@%*##',
 ];
 
-const MOUTH_START = 15;
-
-const MOUTH_FRAMES = [
-  [
-    '@@#-=%@@@%==-+#**+=-=*%@@@%*+-=+***+-=-*@@@%+-*%@%',
-    '%%%=-#@@@#=++-====++=-=%@%+-=**====-++-*@@@%=-#%%%',
-    '%*+=#%%@@*-*%#+-..:+*+=#@#=*#*-..:=*#+:+%@%%#++*%%',
-    '*=#%%+-*#--+#%#+--*%%#+*@#+#%%*=-+#%#=:-##-=%%#+*%',
-    '*+@%%#++=++:+%%@%%%%@%=*@*=#@%%%%@@%+:=+=*+#%%%**%',
-  ],
-  [
-    '@@#-=%@@@%==-+#**+=-=*%@@@%*+-=+***+-=-*@@@%+-*%@%',
-    '%%%=-#@@@#=++-====++=-=%% %=-=**====-++-*@@@%=-#%%%',
-    '%*+=#%%@@*-*%#+-..:+*+=   #=*#*-..:=*#+:+%@%%#++*%%',
-    '*=#%%+-*#--+#%#+--*%%#+* *#+#%%*=-+#%#=:-##-=%%#+*%',
-    '*+@%%#++=++:+%%@%%%%@%=*  *=#@%%%%@@%+:=+=*+#%%%**%',
-  ],
-];
+const MOUTH_ROW = 25;
+const MOUTH_COL_START = 22;
+const MOUTH_COL_END = 26;
 
 interface Props {
   animate?: boolean;
@@ -74,12 +59,13 @@ export default function Portrait({ animate, maxLines }: Props) {
   }, [animate]);
 
   let rows: string[];
-  if (animate) {
+  if (animate && frame === 1) {
     rows = PORTRAIT.slice();
-    const mouth = MOUTH_FRAMES[frame];
-    for (let i = 0; i < mouth.length; i++) {
-      rows[MOUTH_START + i] = mouth[i];
-    }
+    const original = PORTRAIT[MOUTH_ROW];
+    rows[MOUTH_ROW] =
+      original.substring(0, MOUTH_COL_START) +
+      ' '.repeat(MOUTH_COL_END - MOUTH_COL_START + 1) +
+      original.substring(MOUTH_COL_END + 1);
   } else {
     rows = PORTRAIT;
   }
