@@ -322,11 +322,11 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         <Text backgroundColor="#1c1c1c" color="gray" dimColor>
           {'  Ctrl+C quit | /help commands'.padEnd(cols - 2)}
         </Text>
-        {feedbackMsg && (
-          <Text backgroundColor="#1c1c1c" color="green">
-            {'  '}{feedbackMsg.padEnd(cols - 4)}
+        {feedbackMsg && feedbackMsg.split('\n').map((line, i) => (
+          <Text key={i} backgroundColor="#1c1c1c" color="green">
+            {'  '}{line.padEnd(cols - 4)}
           </Text>
-        )}
+        ))}
       </Box>
     </Box>
   );
