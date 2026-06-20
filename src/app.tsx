@@ -285,7 +285,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
       <Box flexDirection="row" flexGrow={1} marginX={1} marginBottom={0}>
         <Box flexShrink={0} marginRight={2}>
-          <Portrait animate={state.status === 'speaking' || state.status === 'listening'} maxLines={portraitLines} />
+          <Portrait animate={state.status === 'speaking'} maxLines={portraitLines} />
         </Box>
         <Box flexGrow={1} flexDirection="column">
           <Chat
