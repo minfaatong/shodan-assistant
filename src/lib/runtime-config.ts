@@ -1,12 +1,15 @@
 import {
   LLM_PROVIDER as ENV_LLM_PROVIDER,
-  LLAMA_MODEL, OPENROUTER_MODEL, OLLAMA_MODEL,
+  LLAMA_MODEL, OPENROUTER_MODEL, OLLAMA_MODEL, CLOUDFLARE_MODEL,
   STT_PROVIDER as ENV_STT_PROVIDER,
   WHISPER_MODEL,
   TTS_PROVIDER as ENV_TTS_PROVIDER,
   OPENAI_TTS_VOICE,
   OPENAI_API_KEY,
   OPENROUTER_API_KEY,
+  CLOUDFLARE_API_KEY,
+  DEEPSEEK_API_KEY,
+  GOOGLE_API_KEY,
   type LlmProviderType,
   type SttProviderType,
   type TtsProviderType,
@@ -30,6 +33,7 @@ interface ProviderOption {
 export const LLM_PROVIDER_OPTIONS: ProviderOption[] = [
   { id: 'llama', label: 'llama.cpp (local)', models: [{ id: 'auto', label: 'auto (server default)' }] },
   { id: 'openrouter', label: 'OpenRouter (cloud)', models: [
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
     { id: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
     { id: 'openai/gpt-4o', label: 'GPT-4o' },
     { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
@@ -39,6 +43,7 @@ export const LLM_PROVIDER_OPTIONS: ProviderOption[] = [
     { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
   ] },
   { id: 'ollama', label: 'Ollama (local)', models: [
+    { id: 'gemma4:31b-cloud', label: 'Gemma 4 31B' },
     { id: 'llama3.2', label: 'Llama 3.2' },
     { id: 'qwen3', label: 'Qwen3' },
     { id: 'mistral', label: 'Mistral' },
@@ -49,6 +54,15 @@ export const LLM_PROVIDER_OPTIONS: ProviderOption[] = [
     { id: 'gpt-4o', label: 'GPT-4o' },
     { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
     { id: 'gpt-4.1', label: 'GPT-4.1' },
+  ] },
+  { id: 'cloudflare', label: 'Cloudflare (cloud)', models: [
+    { id: '@cf/zai-org/glm-5.2', label: 'GLM 5.2' },
+  ] },
+  { id: 'deepseek', label: 'DeepSeek (cloud)', models: [
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { id: 'deepseek-chat', label: 'DeepSeek Chat' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
   ] },
 ];
 
@@ -61,6 +75,7 @@ export const STT_PROVIDER_OPTIONS: ProviderOption[] = [
     { id: 'large', label: 'Large' },
   ] },
   { id: 'openai', label: 'OpenAI Whisper (cloud)' },
+  { id: 'google', label: 'Google STT (cloud)' },
 ];
 
 export const TTS_PROVIDER_OPTIONS: ProviderOption[] = [
@@ -72,6 +87,14 @@ export const TTS_PROVIDER_OPTIONS: ProviderOption[] = [
     { id: 'onyx', label: 'Onyx' },
     { id: 'nova', label: 'Nova' },
     { id: 'shimmer', label: 'Shimmer' },
+  ] },
+  { id: 'google', label: 'Google TTS (cloud)', models: [
+    { id: 'en-US-Neural2-D', label: 'Neural2 D (male)' },
+    { id: 'en-US-Neural2-F', label: 'Neural2 F (female)' },
+    { id: 'en-US-Studio-Q', label: 'Studio Q (male)' },
+    { id: 'en-US-Studio-O', label: 'Studio O (female)' },
+    { id: 'en-US-Journey-D', label: 'Journey D (male)' },
+    { id: 'en-US-Journey-F', label: 'Journey F (female)' },
   ] },
 ];
 
@@ -95,6 +118,9 @@ const PROVIDER_ALIASES: Record<string, string> = {
   openrouter: 'openrouter', 'open router': 'openrouter',
   ollama: 'ollama',
   openai: 'openai', 'open ai': 'openai',
+  cloudflare: 'cloudflare', 'cloud flare': 'cloudflare',
+  deepseek: 'deepseek', 'deep seek': 'deepseek',
+  google: 'google',
   qwen3: 'local', 'qwen 3': 'local',
   'whisper.cpp': 'whispercpp', 'whisper cpp': 'whispercpp', whisper: 'whispercpp',
   kokoro: 'local',
@@ -112,7 +138,7 @@ function initSelections(): RuntimeSelections {
   return {
     llm: { provider: ENV_LLM_PROVIDER, model: resolveDefaultLlmModel(ENV_LLM_PROVIDER) },
     stt: { provider: ENV_STT_PROVIDER, model: ENV_STT_PROVIDER === 'whispercpp' ? WHISPER_MODEL : undefined },
-    tts: { provider: ENV_TTS_PROVIDER, model: ENV_TTS_PROVIDER === 'openai' ? OPENAI_TTS_VOICE : undefined },
+    tts: { provider: ENV_TTS_PROVIDER, model: ENV_TTS_PROVIDER === 'openai' ? OPENAI_TTS_VOICE : ENV_TTS_PROVIDER === 'google' ? 'en-US-Neural2-D' : undefined },
   };
 }
 
@@ -122,18 +148,44 @@ function resolveDefaultLlmModel(provider: string): string | undefined {
     case 'openrouter': return OPENROUTER_MODEL;
     case 'ollama': return OLLAMA_MODEL;
     case 'openai': return 'gpt-4o';
+    case 'cloudflare': return CLOUDFLARE_MODEL;
+    case 'deepseek': return 'deepseek-chat';
     default: return undefined;
   }
 }
 
 let _current: RuntimeSelections = initSelections();
 
+const _runtimeApiKeys: Record<string, string> = {};
+
 export function getRuntimeConfig(): RuntimeSelections {
   return _current;
 }
 
+export function applyProfile(sel: RuntimeSelections): void {
+  _current = JSON.parse(JSON.stringify(sel));
+}
+
 export function resetRuntimeConfig(): void {
   _current = initSelections();
+}
+
+function envKeyFor(kind: ProviderKind): string {
+  const provider = _current[kind].provider;
+  if (provider === 'openrouter') return OPENROUTER_API_KEY;
+  if (provider === 'openai') return OPENAI_API_KEY;
+  if (provider === 'cloudflare') return CLOUDFLARE_API_KEY;
+  if (provider === 'deepseek') return DEEPSEEK_API_KEY;
+  if (provider === 'google') return GOOGLE_API_KEY;
+  return '';
+}
+
+export function getApiKey(kind: ProviderKind): string {
+  return _runtimeApiKeys[kind] || envKeyFor(kind);
+}
+
+export function setApiKey(kind: ProviderKind, key: string): void {
+  _runtimeApiKeys[kind] = key;
 }
 
 // ── Voice command matching ──────────────────────────────────────────

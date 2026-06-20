@@ -4,11 +4,11 @@ import { createReadStream, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  PATHS, OPENAI_API_KEY,
+  PATHS, OPENAI_API_KEY, GOOGLE_API_KEY,
   WHISPER_MODEL_PATH as ENV_WHISPER_MODEL_PATH,
   WHISPER_LANG,
 } from './config.js';
-import { getSttProviderType, getWhisperModel } from './runtime-config.js';
+import { getSttProviderType, getWhisperModel, getApiKey } from './runtime-config.js';
 
 const execFile = promisify(execFileCb);
 
@@ -113,6 +113,53 @@ class OpenAiStt implements SttProvider {
   }
 }
 
+// ── Google Cloud Speech-to-Text ──────────────────────────────────
+
+class GoogleStt implements SttProvider {
+  name = 'Google STT';
+
+  async transcribe(): Promise<string> {
+    const wavPath = await recordOnly();
+    if (!wavPath) return '';
+
+    const { readFileSync } = await import('node:fs');
+    const audioBase64 = readFileSync(wavPath).toString('base64');
+
+    const apiKey = getApiKey('stt') || GOOGLE_API_KEY;
+    if (!apiKey) throw new Error('GOOGLE_API_KEY not set');
+
+    const res = await fetch(
+      `https://speech.googleapis.com/v1/speech:recognize?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config: {
+            encoding: 'LINEAR16',
+            sampleRateHertz: 16000,
+            languageCode: 'en-US',
+            model: 'latest_long',
+          },
+          audio: { content: audioBase64 },
+        }),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Google STT HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as {
+      results?: { alternatives?: { transcript?: string }[] }[];
+    };
+    const parts = (data.results ?? [])
+      .map((r) => r.alternatives?.[0]?.transcript ?? '')
+      .filter(Boolean);
+    return parts.join(' ').trim();
+  }
+}
+
 // ── Factory (always reads runtime config) ────────────────────────
 
 export function createSttProvider(): SttProvider {
@@ -123,6 +170,8 @@ export function createSttProvider(): SttProvider {
       return new WhisperCppStt(getWhisperModel());
     case 'openai':
       return new OpenAiStt();
+    case 'google':
+      return new GoogleStt();
     default:
       return new LocalStt();
   }

@@ -98,28 +98,34 @@ All providers are configured via environment variables. Local defaults apply whe
 ### LLM providers
 | Env var | Default | Options |
 |---------|---------|---------|
-| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` \| `openai` |
+| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` \| `openai` \| `cloudflare` \| `deepseek` |
 | `LLAMA_BASE` | `http://127.0.0.1:8080/v1` | any llama.cpp endpoint |
 | `LLAMA_MODEL` | `Qwen3-8B-Q8_0.gguf` | model loaded on server |
 | `OPENROUTER_API_KEY` | — | your OpenRouter API key |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4-20250514` | any OpenRouter model ID |
 | `OLLAMA_BASE` | `http://localhost:11434` | any Ollama endpoint |
 | `OLLAMA_MODEL` | `llama3.2` | any Ollama model |
+| `CLOUDFLARE_API_KEY` | — | required for `cloudflare` LLM provider |
+| `CLOUDFLARE_ACCOUNT_ID` | — | Cloudflare account ID for Workers AI |
+| `CLOUDFLARE_MODEL` | `@cf/zai-org/glm-5.2` | any Cloudflare Workers AI model |
+| `DEEPSEEK_API_KEY` | — | required for `deepseek` LLM provider |
+| `DEEPSEEK_BASE` | `https://api.deepseek.com` | DeepSeek API base URL |
 | `OPENAI_API_KEY` | — | required for `openai` LLM provider |
 
 ### STT providers
 | Env var | Default | Options |
 |---------|---------|---------|
-| `STT_PROVIDER` | `local` | `local` \| `whispercpp` \| `openai` |
+| `STT_PROVIDER` | `local` | `local` \| `whispercpp` \| `openai` \| `google` |
 | `WHISPER_MODEL` | `small` | `tiny` \| `small` \| `medium` \| `large` |
 | `WHISPER_MODEL_PATH` | (auto) | explicit path to `ggml-*.bin` model file |
 | `WHISPER_LANG` | `en` | language code for whisper.cpp |
+| `GOOGLE_API_KEY` | — | required for `google` provider |
 | `OPENAI_API_KEY` | — | required for `openai` provider |
 
 ### TTS providers
 | Env var | Default | Options |
 |---------|---------|---------|
-| `TTS_PROVIDER` | `local` | `local` \| `openai` |
+| `TTS_PROVIDER` | `local` | `local` \| `openai` \| `google` |
 | `OPENAI_API_KEY` | — | required for `openai` provider |
 | `OPENAI_TTS_VOICE` | `alloy` | `alloy` \| `echo` \| `fable` \| `onyx` \| `nova` \| `shimmer` |
 
@@ -145,6 +151,15 @@ STT_PROVIDER=whispercpp npm start
 
 # whisper.cpp with specific model & custom path
 STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin npm start
+
+# Cloudflare Workers AI as LLM
+CLOUDFLARE_API_KEY=... CLOUDFLARE_ACCOUNT_ID=... LLM_PROVIDER=cloudflare npm start
+
+# DeepSeek as LLM
+DEEPSEEK_API_KEY=... LLM_PROVIDER=deepseek npm start
+
+# Google STT and/or TTS
+GOOGLE_API_KEY=... STT_PROVIDER=google TTS_PROVIDER=google npm start
 ```
 
 ## Text commands
@@ -159,6 +174,9 @@ Type `/` to enter command mode. Available commands:
 | `/stt` | Switch STT provider |
 | `/tts` | Switch TTS provider |
 | `/model` | Switch model for current LLM provider |
+| `/key` | Set API key for current provider |
+| `/profile` | Save, load, or delete profiles |
+| `/default` | Reset all settings to defaults |
 | `/quit` | Exit the application |
 
 Commands show an interactive selection list for provider/model choices.
@@ -178,19 +196,22 @@ Providers and models can be changed mid-session by voice. Say any of:
 
 | Category | Recognized names |
 |----------|------------------|
-| LLM | llama.cpp, OpenRouter, Ollama, OpenAI |
-| STT | Qwen3-ASR (local), whisper.cpp, OpenAI Whisper |
-| TTS | Kokoro (local), OpenAI TTS |
+| LLM | llama.cpp, OpenRouter, Ollama, OpenAI, Cloudflare, DeepSeek |
+| STT | Qwen3-ASR (local), whisper.cpp, OpenAI Whisper, Google STT |
+| TTS | Kokoro (local), OpenAI TTS, Google TTS |
 
 ### Recognized models
 
 | Provider | Models |
 |----------|--------|
-| OpenRouter | Claude Sonnet 4, GPT-4o, GPT-4o mini, DeepSeek V3, Gemini 2.0 Flash, Qwen 2.5 72B, Llama 3.3 70B |
-| Ollama | Llama 3.2, Qwen3, Mistral, Phi-4, DeepSeek R1 |
+| OpenRouter | DeepSeek V4 Flash, Claude Sonnet 4, GPT-4o, GPT-4o mini, DeepSeek V3, Gemini 2.0 Flash, Qwen 2.5 72B, Llama 3.3 70B |
+| Ollama | Gemma 4 31B, Llama 3.2, Qwen3, Mistral, Phi-4, DeepSeek R1 |
 | OpenAI LLM | GPT-4o, GPT-4o mini, GPT-4.1 |
+| Cloudflare | GLM 5.2 |
+| DeepSeek | DeepSeek V4 Flash, DeepSeek V4 Pro, DeepSeek Chat, DeepSeek Reasoner |
 | whisper.cpp | Tiny, Small, Medium, Large |
 | OpenAI TTS | Alloy, Echo, Fable, Onyx, Nova, Shimmer |
+| Google TTS | Neural2 D (male), Neural2 F (female), Studio Q (male), Studio O (female), Journey D (male), Journey F (female) |
 
 ## Runtime requirements
 

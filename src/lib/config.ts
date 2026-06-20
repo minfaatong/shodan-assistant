@@ -17,7 +17,7 @@ export const PATHS = {
 
 // ── LLM ────────────────────────────────────────────────────────────
 
-export type LlmProviderType = 'llama' | 'openrouter' | 'ollama' | 'openai';
+export type LlmProviderType = 'llama' | 'openrouter' | 'ollama' | 'openai' | 'cloudflare' | 'deepseek';
 
 export const LLM_PROVIDER = (env.LLM_PROVIDER ?? 'llama') as LlmProviderType;
 export const LLAMA_BASE = env.LLAMA_BASE ?? 'http://127.0.0.1:8080/v1';
@@ -26,10 +26,15 @@ export const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY ?? '';
 export const OPENROUTER_MODEL = env.OPENROUTER_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
 export const OLLAMA_BASE = env.OLLAMA_BASE ?? 'http://127.0.0.1:11434/v1';
 export const OLLAMA_MODEL = env.OLLAMA_MODEL ?? 'llama3.2';
+export const CLOUDFLARE_API_KEY = env.CLOUDFLARE_API_KEY ?? '';
+export const CLOUDFLARE_ACCOUNT_ID = env.CLOUDFLARE_ACCOUNT_ID ?? '';
+export const CLOUDFLARE_MODEL = env.CLOUDFLARE_MODEL ?? '@cf/zai-org/glm-5.2';
+export const DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY ?? '';
+export const DEEPSEEK_BASE = env.DEEPSEEK_BASE ?? 'https://api.deepseek.com';
 
 // ── STT ────────────────────────────────────────────────────────────
 
-export type SttProviderType = 'local' | 'openai' | 'whispercpp';
+export type SttProviderType = 'local' | 'openai' | 'whispercpp' | 'google';
 
 export const STT_PROVIDER = (env.STT_PROVIDER ?? 'local') as SttProviderType;
 export const WHISPER_MODEL = env.WHISPER_MODEL ?? 'small';
@@ -38,7 +43,7 @@ export const WHISPER_LANG = env.WHISPER_LANG ?? 'en';
 
 // ── TTS ────────────────────────────────────────────────────────────
 
-export type TtsProviderType = 'local' | 'openai';
+export type TtsProviderType = 'local' | 'openai' | 'google';
 
 export const TTS_PROVIDER = (env.TTS_PROVIDER ?? 'local') as TtsProviderType;
 export const OPENAI_TTS_VOICE = env.OPENAI_TTS_VOICE ?? 'alloy';
@@ -46,6 +51,7 @@ export const OPENAI_TTS_VOICE = env.OPENAI_TTS_VOICE ?? 'alloy';
 // ── Shared API keys ────────────────────────────────────────────────
 
 export const OPENAI_API_KEY = env.OPENAI_API_KEY ?? '';
+export const GOOGLE_API_KEY = env.GOOGLE_API_KEY ?? '';
 
 // ── System ─────────────────────────────────────────────────────────
 

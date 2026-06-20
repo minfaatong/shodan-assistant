@@ -2,9 +2,11 @@ import {
   LLAMA_BASE, LLAMA_MODEL as ENV_LLAMA_MODEL,
   OPENROUTER_API_KEY, OPENROUTER_MODEL as ENV_OPENROUTER_MODEL,
   OLLAMA_BASE, OLLAMA_MODEL as ENV_OLLAMA_MODEL,
+  CLOUDFLARE_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_MODEL as ENV_CLOUDFLARE_MODEL,
+  DEEPSEEK_API_KEY, DEEPSEEK_BASE,
   SYSTEM_PROMPT, LLM_TIMEOUT,
 } from './config.js';
-import { getLlmProviderType, getLlmModel } from './runtime-config.js';
+import { getLlmProviderType, getLlmModel, getApiKey } from './runtime-config.js';
 
 export interface LlmProvider {
   name: string;
@@ -86,7 +88,7 @@ class OpenRouterProvider implements LlmProvider {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: prompt },
       ],
-      OPENROUTER_API_KEY,
+      getApiKey('llm') || OPENROUTER_API_KEY,
     );
   }
 }
@@ -121,7 +123,45 @@ class OpenAiLlmProvider implements LlmProvider {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: prompt },
       ],
-      process.env.OPENAI_API_KEY,
+      getApiKey('llm') || process.env.OPENAI_API_KEY,
+    );
+  }
+}
+
+// ── Cloudflare Workers AI ─────────────────────────────────────
+
+class CloudflareProvider implements LlmProvider {
+  private model: string;
+  constructor(model?: string) { this.model = model ?? ENV_CLOUDFLARE_MODEL; }
+  get name(): string { return `Cloudflare (${this.model})`; }
+
+  async complete(prompt: string): Promise<string> {
+    const baseUrl = CLOUDFLARE_ACCOUNT_ID
+      ? `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1`
+      : 'https://api.cloudflare.com/client/v4/ai/v1';
+    return chatCompletions(baseUrl, this.model, [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+    ], getApiKey('llm') || CLOUDFLARE_API_KEY);
+  }
+}
+
+// ── DeepSeek ────────────────────────────────────────────────
+
+class DeepSeekProvider implements LlmProvider {
+  private model: string;
+  constructor(model?: string) { this.model = model ?? 'deepseek-chat'; }
+  get name(): string { return `DeepSeek (${this.model})`; }
+
+  async complete(prompt: string): Promise<string> {
+    return chatCompletions(
+      DEEPSEEK_BASE,
+      this.model,
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+      getApiKey('llm') || DEEPSEEK_API_KEY,
     );
   }
 }
@@ -139,6 +179,10 @@ export function getLlmProvider(): LlmProvider {
       return new OllamaProvider(model);
     case 'openai':
       return new OpenAiLlmProvider(model);
+    case 'cloudflare':
+      return new CloudflareProvider(model);
+    case 'deepseek':
+      return new DeepSeekProvider(model);
     default:
       return new LlamaCppProvider();
   }

@@ -1,8 +1,8 @@
 import { execFile as execFileCb, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
-import { PATHS, OPENAI_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
-import { getTtsProviderType, getTtsVoice } from './runtime-config.js';
+import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
+import { getTtsProviderType, getTtsVoice, getApiKey } from './runtime-config.js';
 import { beepStart, beepEnd } from './beeps.js';
 import { splitResponse } from './split.js';
 
@@ -99,6 +99,52 @@ class OpenAiTts implements TtsProvider {
   }
 }
 
+// ── Google Cloud Text-to-Speech ─────────────────────────────────
+
+class GoogleTts implements TtsProvider {
+  private voice: string;
+  constructor(voice?: string) { this.voice = voice ?? 'en-US-Neural2-D'; }
+  get name(): string { return `Google TTS (${this.voice})`; }
+
+  async speak(text: string): Promise<void> {
+    if (!text) return;
+
+    const apiKey = getApiKey('tts') || GOOGLE_API_KEY;
+    if (!apiKey) throw new Error('GOOGLE_API_KEY not set');
+
+    const res = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'en-US', name: this.voice },
+          audioConfig: { audioEncoding: 'MP3' },
+        }),
+      },
+    );
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Google TTS HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as { audioContent?: string };
+    if (!data.audioContent) throw new Error('Google TTS: empty response');
+
+    const buf = Buffer.from(data.audioContent, 'base64');
+    const out = `/tmp/_shodan_tts_${process.pid}.mp3`;
+    writeFileSync(out, buf);
+
+    try {
+      execFileSync('afplay', [out], { timeout: 30000, stdio: 'ignore' });
+    } finally {
+      try { unlinkSync(out); } catch {}
+    }
+  }
+}
+
 // ── Factory (always reads runtime config) ─────────────────────
 
 export function getTtsProvider(): TtsProvider {
@@ -107,6 +153,8 @@ export function getTtsProvider(): TtsProvider {
   switch (type) {
     case 'openai':
       return new OpenAiTts(getTtsVoice());
+    case 'google':
+      return new GoogleTts(getTtsVoice());
     default:
       return new LocalTts();
   }

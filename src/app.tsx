@@ -11,10 +11,9 @@ import { runAgent } from './lib/agent.js';
 import { getLlmProvider } from './lib/llm.js';
 import { getSttProvider } from './lib/listener.js';
 import { getTtsProvider } from './lib/speaker.js';
-import { parseCommand } from './lib/commands.js';
+import { parseCommand, type CommandResult, type MenuDef } from './lib/commands.js';
 import type { AgentState } from './lib/types.js';
 import type { AgentController } from './lib/agent.js';
-import type { MenuDef } from './lib/commands.js';
 
 const MIN_ROWS = 22;
 const MIN_COLS = 60;
@@ -27,7 +26,8 @@ const INITIAL: AgentState = {
 type InputMode =
   | { type: 'idle' }
   | { type: 'command'; buffer: string }
-  | { type: 'menu'; def: MenuDef; cursor: number };
+  | { type: 'menu'; def: MenuDef; cursor: number }
+  | { type: 'keyinput'; buffer: string; prompt: string; onSubmit: (value: string) => CommandResult };
 
 interface Props {
   intro?: string;
@@ -155,10 +155,47 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       }
       return;
     }
+
+    if (inputMode.type === 'keyinput') {
+      if (key.escape) {
+        setInputMode({ type: 'idle' });
+        ctrlRef.current?.resume();
+        return;
+      }
+      if (key.return) {
+        const value = inputMode.buffer.trim();
+        if (value) {
+          const result = inputMode.onSubmit(value);
+          handleCommandResult(result);
+        } else {
+          showFeedback('No input entered, cancelled');
+          setInputMode({ type: 'idle' });
+          ctrlRef.current?.resume();
+        }
+        return;
+      }
+      if (key.backspace) {
+        setInputMode((prev) =>
+          prev.type === 'keyinput'
+            ? { ...prev, buffer: prev.buffer.slice(0, -1) }
+            : prev,
+        );
+        return;
+      }
+      if (input) {
+        setInputMode((prev) =>
+          prev.type === 'keyinput'
+            ? { ...prev, buffer: prev.buffer + input }
+            : prev,
+        );
+        return;
+      }
+      return;
+    }
   });
 
   function handleCommandResult(
-    result: ReturnType<typeof parseCommand>,
+    result: CommandResult,
   ) {
     switch (result.type) {
       case 'done':
@@ -168,6 +205,9 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         break;
       case 'menu':
         setInputMode({ type: 'menu', def: result.menu, cursor: 0 });
+        break;
+      case 'keyinput':
+        setInputMode({ type: 'keyinput', buffer: '', prompt: result.prompt, onSubmit: result.onSubmit });
         break;
       case 'quit':
         ctrlRef.current?.shutdown();
@@ -228,6 +268,16 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       {inputMode.type === 'command' && (
         <Box marginX={1} marginBottom={1}>
           <CommandInput buffer={inputMode.buffer} />
+        </Box>
+      )}
+
+      {inputMode.type === 'keyinput' && (
+        <Box marginX={1} marginBottom={1}>
+          <Text>
+            <Text color="yellow">{inputMode.prompt} </Text>
+            <Text>{inputMode.buffer.length > 0 ? '\u2022'.repeat(Math.max(1, inputMode.buffer.length)) : ''}</Text>
+            <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press \u23ce)' : ''}</Text>
+          </Text>
         </Box>
       )}
 
