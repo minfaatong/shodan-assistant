@@ -21,8 +21,9 @@ const INITIAL: AgentState = {
   logs: [],
 };
 
-type InputMode =
-  | { type: 'none' }
+type Popup =
+  | null
+  | { type: 'message'; text: string }
   | { type: 'menu'; def: MenuDef; cursor: number }
   | { type: 'keyinput'; buffer: string; cursor: number; prompt: string; onSubmit: (value: string) => CommandResult };
 
@@ -38,17 +39,12 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const { exit } = useApp();
   const ctrlRef = useRef<AgentController | null>(null);
   const { rows, cols } = useTermSize();
-  const [inputMode, setInputMode] = useState<InputMode>({ type: 'none' });
+  const [popup, setPopup] = useState<Popup>(null);
   const [chatScrollOffset, setChatScrollOffset] = useState(0);
-  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [textBuffer, setTextBuffer] = useState('');
   const [textCursor, setTextCursor] = useState(0);
   const inputRef = useRef({ buffer: '', cursor: 0 });
   const pendingQueue = useRef<string[]>([]);
-
-  const showFeedback = useCallback((msg: string) => {
-    setFeedbackMsg(msg);
-  }, []);
 
   useEffect(() => {
     runAgent({
@@ -68,18 +64,21 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     };
   }, []);
 
+  const dismissPopup = useCallback(() => {
+    setPopup(null);
+  }, []);
+
   function handleCommandResult(result: CommandResult) {
     switch (result.type) {
       case 'done':
-        showFeedback(result.message);
-        setInputMode({ type: 'none' });
+        setPopup({ type: 'message', text: result.message });
         ctrlRef.current?.resume();
         break;
       case 'menu':
-        setInputMode({ type: 'menu', def: result.menu, cursor: 0 });
+        setPopup({ type: 'menu', def: result.menu, cursor: 0 });
         break;
       case 'keyinput':
-        setInputMode({ type: 'keyinput', buffer: '', cursor: 0, prompt: result.prompt, onSubmit: result.onSubmit });
+        setPopup({ type: 'keyinput', buffer: '', cursor: 0, prompt: result.prompt, onSubmit: result.onSubmit });
         break;
       case 'quit':
         ctrlRef.current?.shutdown();
@@ -101,88 +100,70 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   }
 
   useInput((input, key) => {
-    if (inputMode.type === 'menu') {
+    // Popup overlay has priority
+    if (popup) {
       if (key.escape) {
-        setInputMode({ type: 'none' });
+        dismissPopup();
         return;
       }
-      if (key.upArrow) {
-        setInputMode((prev) =>
-          prev.type === 'menu'
-            ? { ...prev, cursor: Math.max(0, prev.cursor - 1) }
-            : prev,
-        );
-        return;
-      }
-      if (key.downArrow) {
-        setInputMode((prev) =>
-          prev.type === 'menu'
-            ? { ...prev, cursor: Math.min(prev.def.items.length - 1, prev.cursor + 1) }
-            : prev,
-        );
-        return;
-      }
-      if (key.return) {
-        const result = inputMode.def.onSelect(inputMode.cursor);
-        handleCommandResult(result);
-        return;
-      }
-      return;
-    }
-
-    if (inputMode.type === 'keyinput') {
-      if (key.escape) {
-        setInputMode({ type: 'none' });
-        return;
-      }
-      if (key.return) {
-        const value = inputMode.buffer.trim();
-        if (value) {
-          const result = inputMode.onSubmit(value);
+      if (popup.type === 'menu') {
+        if (key.upArrow) {
+          setPopup({ ...popup, cursor: Math.max(0, popup.cursor - 1) });
+          return;
+        }
+        if (key.downArrow) {
+          setPopup({ ...popup, cursor: Math.min(popup.def.items.length - 1, popup.cursor + 1) });
+          return;
+        }
+        if (key.return) {
+          const result = popup.def.onSelect(popup.cursor);
           handleCommandResult(result);
-        } else {
-          showFeedback('No input entered, cancelled');
-          setInputMode({ type: 'none' });
+          return;
         }
         return;
       }
-      if (key.leftArrow) {
-        setInputMode((prev) =>
-          prev.type === 'keyinput'
-            ? { ...prev, cursor: Math.max(0, prev.cursor - 1) }
-            : prev,
-        );
+      if (popup.type === 'keyinput') {
+        if (key.return) {
+          const value = popup.buffer.trim();
+          if (value) {
+            const result = popup.onSubmit(value);
+            handleCommandResult(result);
+          } else {
+            dismissPopup();
+          }
+          return;
+        }
+        if (key.leftArrow) {
+          setPopup({ ...popup, cursor: Math.max(0, popup.cursor - 1) });
+          return;
+        }
+        if (key.rightArrow) {
+          setPopup({ ...popup, cursor: Math.min(popup.buffer.length, popup.cursor + 1) });
+          return;
+        }
+        if (key.backspace) {
+          if (popup.cursor > 0) {
+            const buf = popup.buffer.slice(0, popup.cursor - 1) + popup.buffer.slice(popup.cursor);
+            setPopup({ ...popup, buffer: buf, cursor: popup.cursor - 1 });
+          }
+          return;
+        }
+        if (input) {
+          const buf = popup.buffer.slice(0, popup.cursor) + input + popup.buffer.slice(popup.cursor);
+          setPopup({ ...popup, buffer: buf, cursor: popup.cursor + 1 });
+          return;
+        }
         return;
       }
-      if (key.rightArrow) {
-        setInputMode((prev) =>
-          prev.type === 'keyinput'
-            ? { ...prev, cursor: Math.min(prev.buffer.length, prev.cursor + 1) }
-            : prev,
-        );
-        return;
-      }
-      if (key.backspace) {
-        setInputMode((prev) => {
-          if (prev.type !== 'keyinput') return prev;
-          if (prev.cursor <= 0) return prev;
-          const buf = prev.buffer.slice(0, prev.cursor - 1) + prev.buffer.slice(prev.cursor);
-          return { ...prev, buffer: buf, cursor: prev.cursor - 1 };
-        });
-        return;
-      }
-      if (input) {
-        setInputMode((prev) => {
-          if (prev.type !== 'keyinput') return prev;
-          const buf = prev.buffer.slice(0, prev.cursor) + input + prev.buffer.slice(prev.cursor);
-          return { ...prev, buffer: buf, cursor: prev.cursor + 1 };
-        });
+      if (popup.type === 'message') {
+        // Any key dismisses
+        dismissPopup();
         return;
       }
       return;
     }
 
-    // Text input mode (none) — read/write inputRef for latest values across batched callbacks
+    // Text input mode — read/write inputRef for latest values across batched callbacks
     if (input === '\x03') {
       ctrlRef.current?.shutdown();
       exit();
@@ -199,10 +180,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
     if (key.escape) {
-      if (feedbackMsg) {
-        setFeedbackMsg(null);
-        return;
-      }
       inputRef.current = { buffer: '', cursor: 0 };
       setTextBuffer('');
       setTextCursor(0);
@@ -236,7 +213,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
     if (input) {
-      if (feedbackMsg) setFeedbackMsg(null);
       const { buffer, cursor } = inputRef.current;
       const nextBuf = buffer.slice(0, cursor) + input + buffer.slice(cursor);
       inputRef.current = { buffer: nextBuf, cursor: cursor + 1 };
@@ -253,26 +229,41 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const showRule = rows >= 25;
 
-  const hasOverlay = inputMode.type !== 'none';
   const headerRows = 1 + (showRule ? 1 : 0);
   const contentRows = rows - headerRows - 1;
   const maxChatLines = Math.max(15, contentRows);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
 
-  let overlayContent: React.ReactNode = null;
-  if (inputMode.type === 'menu') {
-    overlayContent = <CommandMenu def={inputMode.def} cursor={inputMode.cursor} />;
-  } else if (inputMode.type === 'keyinput') {
-    overlayContent = (
-      <Text>
-        <Text color="yellow">{inputMode.prompt} </Text>
-        <Text>{inputMode.buffer.slice(0, inputMode.cursor)}</Text>
-        <Text color="yellow">█</Text>
-        <Text>{inputMode.buffer.slice(inputMode.cursor)}</Text>
-        <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press ⏎)' : ''}</Text>
-      </Text>
-    );
+  let popupContent: React.ReactNode = null;
+  if (popup) {
+    if (popup.type === 'menu') {
+      popupContent = (
+        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
+          <CommandMenu def={popup.def} cursor={popup.cursor} />
+        </Box>
+      );
+    } else if (popup.type === 'keyinput') {
+      popupContent = (
+        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
+          <Text>
+            <Text color="yellow">{popup.prompt} </Text>
+            <Text>{popup.buffer.slice(0, popup.cursor)}</Text>
+            <Text color="yellow">█</Text>
+            <Text>{popup.buffer.slice(popup.cursor)}</Text>
+            <Text dimColor>{popup.buffer.length === 0 ? '(type and press ⏎)' : ''}</Text>
+          </Text>
+        </Box>
+      );
+    } else if (popup.type === 'message') {
+      popupContent = (
+        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
+          {popup.text.split('\n').map((line, i) => (
+            <Text key={i}>{line}</Text>
+          ))}
+        </Box>
+      );
+    }
   }
 
   if (tooSmall) {
@@ -306,7 +297,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
             maxLines={maxChatLines}
             scrollOffset={chatScrollOffset}
             onScroll={setChatScrollOffset}
-            footer={hasOverlay ? overlayContent : undefined}
           />
         </Box>
       </Box>
@@ -322,12 +312,13 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         <Text backgroundColor="#1c1c1c" color="gray" dimColor>
           {'  Ctrl+C quit | /help commands'}
         </Text>
-        {feedbackMsg && feedbackMsg.split('\n').map((line, i) => (
-          <Text key={i} backgroundColor="#1c1c1c" color="green">
-            {'  '}{line}
-          </Text>
-        ))}
       </Box>
+
+      {popupContent && (
+        <Box position="absolute" width={cols} height={rows} alignItems="center" justifyContent="center">
+          {popupContent}
+        </Box>
+      )}
     </Box>
   );
 }
