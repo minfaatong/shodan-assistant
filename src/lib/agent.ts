@@ -6,6 +6,7 @@ import { ensureBeeps } from './beeps.js';
 import { listenOnce, abortListen, getSttProvider } from './listener.js';
 import { speakChunked, getTtsProvider } from './speaker.js';
 import { getLlmProvider } from './llm.js';
+import { log, logError } from './logger.js';
 import { parseSwitchCommand, applySwitch } from './runtime-config.js';
 import { bootProfile } from './profiles.js';
 
@@ -53,6 +54,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   }
 
   const greeting = opts.intro ?? GREETINGS[0];
+  log('agent', 'start', `greeting: "${greeting}"`);
   notify();
 
   if (!opts.silent) {
@@ -70,22 +72,29 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
       try {
         // ── Check for text input ──────────────────────────────
         if (pendingText) {
-          await processInput(pendingText);
+          const text = pendingText;
           pendingText = null;
+          await processInput(text);
           continue;
         }
 
         setSt('listening');
         notify();
 
+        // Re-check — submitText may have raced between notify() and listenOnce()
+        if (pendingText) continue;
+
         const transcript = await listenOnce();
         if (shutdown) break;
         if (transcript === null) continue;
         if (pendingText) {
-          await processInput(pendingText);
+          const text = pendingText;
           pendingText = null;
+          await processInput(text);
           continue;
         }
+
+        log('stt', transcript ?? '(null)');
 
         // ── Handle silence ────────────────────────────────────
         if (!transcript || transcript === '(no speech detected)') {
@@ -106,6 +115,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         const sw = parseSwitchCommand(transcript);
         if (sw) {
           const msg = applySwitch(sw);
+          log('switch', `${sw.kind}-${sw.provider}: ${msg}`);
           state.conversation = [...state.conversation, { role: 'user', text: transcript }];
           notify();
           if (!opts.silent) {
@@ -118,6 +128,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
       } catch (err: unknown) {
         if (shutdown) break;
+        logError(err, 'loop');
         setSt('idle');
         notify();
         await new Promise((r) => setTimeout(r, 1000));
@@ -125,8 +136,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
     }
   })();
 
-  return {
-    shutdown() {
+    return {
+        shutdown() {
+      log('agent', 'shutdown');
       shutdown = true;
     },
     pause() {
@@ -152,6 +164,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
     const sw = parseSwitchCommand(text);
     if (sw) {
       const msg = applySwitch(sw);
+      log('switch', `${sw.kind}-${sw.provider}: ${msg}`);
       state.conversation = [...state.conversation, { role: 'user', text }];
       notify();
       if (!opts.silent) {
@@ -164,10 +177,26 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
     state.conversation = [...state.conversation, { role: 'user', text }];
     notify();
 
-    const reply = await getLlmProvider().complete(text);
+    log('user', text);
+
+    let reply: string | null;
+    try {
+      reply = await getLlmProvider().complete(text);
+    } catch (err) {
+      logError(err, 'LLM complete');
+      const errMsg = `I'm having trouble reaching the LLM server. ${err instanceof Error ? err.message : 'Unknown error'}`;
+      state.conversation = [...state.conversation, { role: 'assistant', text: errMsg }];
+      setSt('listening');
+      notify();
+      if (!opts.silent) {
+        speakChunked(errMsg, opts.gap ?? 1.2).catch(() => {});
+      }
+      return;
+    }
     if (shutdown) return;
 
     if (reply) {
+      log('assistant', reply);
       state.conversation = [...state.conversation, { role: 'assistant', text: reply }];
       setSt('speaking');
       notify();

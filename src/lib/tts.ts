@@ -4,6 +4,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
 import { getTtsProviderType, getTtsVoice, getApiKey } from './runtime-config.js';
 import { beepStart } from './beeps.js';
+import { logError } from './logger.js';
 
 const execFile = promisify(execFileCb);
 
@@ -49,7 +50,7 @@ class LocalTts implements TtsProvider {
       });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      console.error(`[TTS] error: ${err}`);
+      logError(err, 'TTS');
     } finally {
       try { unlinkSync(out); } catch {}
     }

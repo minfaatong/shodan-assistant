@@ -45,6 +45,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [textBuffer, setTextBuffer] = useState('');
   const [textCursor, setTextCursor] = useState(0);
+  const inputRef = useRef({ buffer: '', cursor: 0 });
   const pendingQueue = useRef<string[]>([]);
 
   const showFeedback = useCallback((msg: string) => {
@@ -102,8 +103,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     } else {
       pendingQueue.current.push(text);
     }
-    setTextBuffer('');
-    setTextCursor(0);
   }
 
   useInput((input, key) => {
@@ -188,7 +187,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
 
-    // Text input mode (none)
+    // Text input mode (none) — read/write inputRef for latest values across batched callbacks
     if (input === '\x03') {
       ctrlRef.current?.shutdown();
       exit();
@@ -205,32 +204,44 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       return;
     }
     if (key.escape) {
+      inputRef.current = { buffer: '', cursor: 0 };
       setTextBuffer('');
       setTextCursor(0);
       return;
     }
     if (key.return) {
-      submitText(textBuffer);
+      submitText(inputRef.current.buffer);
+      inputRef.current = { buffer: '', cursor: 0 };
+      setTextBuffer('');
+      setTextCursor(0);
       return;
     }
     if (key.leftArrow) {
-      setTextCursor((p) => Math.max(0, p - 1));
+      inputRef.current = { ...inputRef.current, cursor: Math.max(0, inputRef.current.cursor - 1) };
+      setTextCursor(inputRef.current.cursor);
       return;
     }
     if (key.rightArrow) {
-      setTextCursor((p) => Math.min(textBuffer.length, p + 1));
+      inputRef.current = { ...inputRef.current, cursor: Math.min(inputRef.current.buffer.length, inputRef.current.cursor + 1) };
+      setTextCursor(inputRef.current.cursor);
       return;
     }
     if (key.backspace) {
-      if (textCursor > 0) {
-        setTextBuffer((prev) => prev.slice(0, textCursor - 1) + prev.slice(textCursor));
-        setTextCursor((p) => p - 1);
+      const { buffer, cursor } = inputRef.current;
+      if (cursor > 0) {
+        const nextBuf = buffer.slice(0, cursor - 1) + buffer.slice(cursor);
+        inputRef.current = { buffer: nextBuf, cursor: cursor - 1 };
+        setTextBuffer(nextBuf);
+        setTextCursor(cursor - 1);
       }
       return;
     }
     if (input) {
-      setTextBuffer((prev) => prev.slice(0, textCursor) + input + prev.slice(textCursor));
-      setTextCursor((p) => p + 1);
+      const { buffer, cursor } = inputRef.current;
+      const nextBuf = buffer.slice(0, cursor) + input + buffer.slice(cursor);
+      inputRef.current = { buffer: nextBuf, cursor: cursor + 1 };
+      setTextBuffer(nextBuf);
+      setTextCursor(cursor + 1);
     }
   });
 
