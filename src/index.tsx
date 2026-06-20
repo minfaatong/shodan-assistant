@@ -32,11 +32,11 @@ Options:
   process.exit(0);
 }
 
-const BG_BLACK = '\x1b[40m';
-const BG_RESET = '\x1b[49m';
+const OSC_DEF_BG = '\x1b]11;rgb:0000/0000/0000\x1b\\';
+const OSC_RESET_BG = '\x1b]111\x1b\\';
 
 function exitAltScreen() {
-  process.stdout.write(BG_RESET);
+  process.stdout.write(OSC_RESET_BG);
   process.stdout.write('\x1b[?1049l');
 }
 
@@ -44,7 +44,7 @@ process.on('SIGINT', () => { exitAltScreen(); process.exit(0); });
 process.on('SIGTERM', () => { exitAltScreen(); process.exit(0); });
 
 process.stdout.write('\x1b[?1049h');
-process.stdout.write(BG_BLACK);
+process.stdout.write(OSC_DEF_BG);
 
 try {
   const { waitUntilExit } = render(
