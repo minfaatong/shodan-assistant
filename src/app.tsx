@@ -3,6 +3,7 @@ import { Box, useApp, useInput, Text } from 'ink';
 import StatusBar from './components/status-bar.js';
 import Chat from './components/chat.js';
 import LogPanel from './components/log-panel.js';
+import Portrait from './components/portrait.js';
 import { runAgent } from './lib/agent.js';
 import { getLlmProvider } from './lib/llm.js';
 import { getSttProvider } from './lib/listener.js';
@@ -52,19 +53,26 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   return (
     <Box flexDirection="column" minHeight="100%">
       <StatusBar status={state.status} />
-      <Box marginX={1} columnGap={2}>
-        <Text color="gray" italic>
-          LLM: {getLlmProvider().name}
-        </Text>
-        <Text color="gray" italic>
-          STT: {getSttProvider().name}
-        </Text>
-        <Text color="gray" italic>
-          TTS: {getTtsProvider().name}
-        </Text>
+
+      <Box flexGrow={1} marginX={1}>
+        <Chat messages={state.conversation} />
       </Box>
-      <Chat messages={state.conversation} />
-      <LogPanel logs={state.logs} />
+
+      <Box flexDirection="row" marginX={1} marginBottom={1}>
+        <Portrait />
+        <Box flexDirection="column">
+          <Text color="gray" italic>
+            LLM: {getLlmProvider().name}
+          </Text>
+          <Text color="gray" italic>
+            STT: {getSttProvider().name}
+          </Text>
+          <Text color="gray" italic>
+            TTS: {getTtsProvider().name}
+          </Text>
+          <LogPanel logs={state.logs} />
+        </Box>
+      </Box>
     </Box>
   );
 }
