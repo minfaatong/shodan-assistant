@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import type { AgentOptions, AgentState, Status } from './types.js';
 import { PATHS, GREETINGS } from './config.js';
 import { ensureBeeps } from './beeps.js';
-import { listenOnce, getSttProvider } from './listener.js';
+import { listenOnce, abortListen, getSttProvider } from './listener.js';
 import { speakChunked, getTtsProvider } from './speaker.js';
 import { getLlmProvider } from './llm.js';
 import { parseSwitchCommand, applySwitch } from './runtime-config.js';
@@ -28,6 +28,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   let shutdown = false;
   let paused = false;
   let pendingText: string | null = null;
+  let speechAbortController: AbortController | null = null;
+  let bargeAbortController: AbortController | null = null;
   const notify = () => opts.onStateChange({ ...state });
 
   ensureBeeps();
@@ -45,9 +47,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
       try {
         await execFile('bash', [PATHS.SAY_SH, 'warmup', out], { timeout: 90_000 });
       } finally {
-        for (const p of [out, out.replace('.wav', '_slow.wav')]) {
-          try { await execFile('rm', ['-f', p]); } catch {}
-        }
+        try { await execFile('rm', ['-f', out]); } catch {}
       }
     }
   }
@@ -56,7 +56,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   notify();
 
   if (!opts.silent) {
-    speakChunked(greeting, opts.gap ?? 1.2).catch(() => {});
+    await speakChunked(greeting, opts.gap ?? 1.2);
   }
 
   setSt('listening');
@@ -68,18 +68,26 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   (async function loop() {
     while (!shutdown) {
       try {
-        setSt(paused ? 'idle' : 'listening');
+        // ── Check for text input ──────────────────────────────
+        if (pendingText) {
+          await processInput(pendingText);
+          pendingText = null;
+          continue;
+        }
+
+        setSt('listening');
         notify();
 
-        while (paused && !shutdown) {
-          await new Promise((r) => setTimeout(r, 100));
+        const transcript = await listenOnce();
+        if (shutdown) break;
+        if (transcript === null) continue;
+        if (pendingText) {
+          await processInput(pendingText);
+          pendingText = null;
+          continue;
         }
-        if (shutdown) break;
 
-        const transcript = pendingText ?? await listenOnce();
-        pendingText = null;
-
-        if (shutdown) break;
+        // ── Handle silence ────────────────────────────────────
         if (!transcript || transcript === '(no speech detected)') {
           consecutiveEmpty++;
           if (consecutiveEmpty >= 10 && !opts.silent) {
@@ -94,7 +102,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
         consecutiveEmpty = 0;
 
-        // ── Check for runtime switch command ──────────────────────
+        // ── Check for runtime switch command ──────────────────
         const sw = parseSwitchCommand(transcript);
         if (sw) {
           const msg = applySwitch(sw);
@@ -105,30 +113,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
           }
           continue;
         }
-        // ───────────────────────────────────────────────────────────
 
-        setSt('thinking');
-        state.conversation = [...state.conversation, { role: 'user', text: transcript }];
-        notify();
+        await processInput(transcript);
 
-        const reply = await getLlmProvider().complete(transcript);
-        if (shutdown) break;
-
-        if (reply) {
-          state.conversation = [...state.conversation, { role: 'assistant', text: reply }];
-          setSt('speaking');
-          notify();
-
-          if (!opts.silent) {
-            await speakChunked(reply, opts.gap ?? 1.2);
-          }
-
-          setSt('listening');
-          notify();
-        } else {
-          setSt('listening');
-          notify();
-        }
       } catch (err: unknown) {
         if (shutdown) break;
         setSt('idle');
@@ -149,11 +136,78 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
       paused = false;
     },
     submitText(text: string) {
+      abortListen();
+      speechAbortController?.abort();
+      bargeAbortController?.abort();
       pendingText = text;
     },
   };
 
   function setSt(st: Status): void {
     state.status = st;
+  }
+
+  async function processInput(text: string) {
+    // ── Runtime switch check (also for text input) ────────────
+    const sw = parseSwitchCommand(text);
+    if (sw) {
+      const msg = applySwitch(sw);
+      state.conversation = [...state.conversation, { role: 'user', text }];
+      notify();
+      if (!opts.silent) {
+        await speakChunked(`Okay, ${msg}.`, opts.gap ?? 1.2);
+      }
+      return;
+    }
+
+    setSt('thinking');
+    state.conversation = [...state.conversation, { role: 'user', text }];
+    notify();
+
+    const reply = await getLlmProvider().complete(text);
+    if (shutdown) return;
+
+    if (reply) {
+      state.conversation = [...state.conversation, { role: 'assistant', text: reply }];
+      setSt('speaking');
+      notify();
+
+      // ── Speak with concurrent listen for barge-in ───────────
+      speechAbortController = new AbortController();
+      bargeAbortController = new AbortController();
+
+      const talk = speakChunked(reply, opts.gap ?? 1.2, speechAbortController.signal)
+        .then(() => null)
+        .catch((e) => {
+          if (e instanceof Error && e.name === 'AbortError') return null;
+          throw e;
+        });
+
+      const hear = listenOnce()
+        .then((t) => t)
+        .catch(() => null);
+
+      const winner = await Promise.race([talk, hear]);
+      bargeAbortController.abort();
+      bargeAbortController = null;
+
+      if (winner !== null && typeof winner === 'string') {
+        // Voice input arrived during speech — cancel speech, process voice
+        speechAbortController?.abort();
+        speechAbortController = null;
+        setSt('listening');
+        notify();
+        await processInput(winner);
+        return;
+      }
+
+      // Speech finished without interruption
+      speechAbortController = null;
+      setSt('listening');
+      notify();
+    } else {
+      setSt('listening');
+      notify();
+    }
   }
 }

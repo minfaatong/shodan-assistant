@@ -14,13 +14,14 @@ const execFile = promisify(execFileCb);
 
 export interface SttProvider {
   name: string;
-  transcribe(): Promise<string>;
+  transcribe(signal?: AbortSignal): Promise<string>;
 }
 
 // ── Shared: record-only helper ────────────────────────────────────
 
-async function recordOnly(): Promise<string> {
+async function recordOnly(signal?: AbortSignal): Promise<string> {
   const { stdout } = await execFile('bash', [PATHS.LISTEN_SH, 'qwen3', '--record-only'], {
+    signal,
     timeout: 120_000,
   });
   return (stdout ?? '').trim();
@@ -31,8 +32,9 @@ async function recordOnly(): Promise<string> {
 class LocalStt implements SttProvider {
   name = 'local (Qwen3-ASR)';
 
-  async transcribe(): Promise<string> {
+  async transcribe(signal?: AbortSignal): Promise<string> {
     const { stdout } = await execFile('bash', [PATHS.LISTEN_SH, 'qwen3'], {
+      signal,
       timeout: 120_000,
     });
     return (stdout ?? '').trim();
@@ -58,8 +60,8 @@ class WhisperCppStt implements SttProvider {
     );
   }
 
-  async transcribe(): Promise<string> {
-    const wavPath = await recordOnly();
+  async transcribe(signal?: AbortSignal): Promise<string> {
+    const wavPath = await recordOnly(signal);
     if (!wavPath) return '';
 
     const modelPath = this.resolveModelPath();
@@ -76,7 +78,7 @@ class WhisperCppStt implements SttProvider {
       '-f', wavPath,
       '-l', WHISPER_LANG,
       '-np', '-nt',
-    ], { timeout: 120_000 });
+    ], { signal, timeout: 120_000 });
 
     return (stdout ?? '').trim();
   }
@@ -87,8 +89,8 @@ class WhisperCppStt implements SttProvider {
 class OpenAiStt implements SttProvider {
   name = 'OpenAI Whisper';
 
-  async transcribe(): Promise<string> {
-    const wavPath = await recordOnly();
+  async transcribe(signal?: AbortSignal): Promise<string> {
+    const wavPath = await recordOnly(signal);
     if (!wavPath) return '';
 
     const form = new FormData();
@@ -101,6 +103,7 @@ class OpenAiStt implements SttProvider {
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+      signal,
       body: form,
     });
 
@@ -118,8 +121,8 @@ class OpenAiStt implements SttProvider {
 class GoogleStt implements SttProvider {
   name = 'Google STT';
 
-  async transcribe(): Promise<string> {
-    const wavPath = await recordOnly();
+  async transcribe(signal?: AbortSignal): Promise<string> {
+    const wavPath = await recordOnly(signal);
     if (!wavPath) return '';
 
     const { readFileSync } = await import('node:fs');
@@ -133,6 +136,7 @@ class GoogleStt implements SttProvider {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
           config: {
             encoding: 'LINEAR16',

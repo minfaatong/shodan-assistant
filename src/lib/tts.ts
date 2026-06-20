@@ -3,14 +3,13 @@ import { promisify } from 'node:util';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
 import { getTtsProviderType, getTtsVoice, getApiKey } from './runtime-config.js';
-import { beepStart, beepEnd } from './beeps.js';
-import { splitResponse } from './split.js';
+import { beepStart } from './beeps.js';
 
 const execFile = promisify(execFileCb);
 
 export interface TtsProvider {
   name: string;
-  speak(text: string): Promise<void>;
+  speak(text: string, signal?: AbortSignal): Promise<void>;
 }
 
 // ── Quick clip helper (shared) ────────────────────────────────────
@@ -40,20 +39,19 @@ function quickClip(text: string): boolean {
 class LocalTts implements TtsProvider {
   name = 'local (Kokoro bf_isabella)';
 
-  async speak(text: string): Promise<void> {
+  async speak(text: string, signal?: AbortSignal): Promise<void> {
     if (!text) return;
     const out = `/tmp/_shodan_tts_${process.pid}.wav`;
     try {
-      const { stderr } = await execFile('bash', [PATHS.SAY_SH, text, out], {
+      await execFile('bash', [PATHS.SAY_SH, text, out], {
+        signal,
         timeout: TTS_TIMEOUT,
       });
-      if (stderr) console.error(`[TTS] say.sh: ${String(stderr).slice(0, 200)}`);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error(`[TTS] error: ${err}`);
     } finally {
-      for (const p of [out, out.replace('.wav', '_slow.wav')]) {
-        try { unlinkSync(p); } catch {}
-      }
+      try { unlinkSync(out); } catch {}
     }
   }
 }
@@ -65,7 +63,7 @@ class OpenAiTts implements TtsProvider {
   constructor(voice?: string) { this.voice = voice ?? 'alloy'; }
   get name(): string { return `OpenAI TTS (${this.voice})`; }
 
-  async speak(text: string): Promise<void> {
+  async speak(text: string, signal?: AbortSignal): Promise<void> {
     if (!text) return;
 
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -74,6 +72,7 @@ class OpenAiTts implements TtsProvider {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
+      signal,
       body: JSON.stringify({
         model: 'tts-1',
         voice: this.voice,
@@ -106,7 +105,7 @@ class GoogleTts implements TtsProvider {
   constructor(voice?: string) { this.voice = voice ?? 'en-US-Neural2-D'; }
   get name(): string { return `Google TTS (${this.voice})`; }
 
-  async speak(text: string): Promise<void> {
+  async speak(text: string, signal?: AbortSignal): Promise<void> {
     if (!text) return;
 
     const apiKey = getApiKey('tts') || GOOGLE_API_KEY;
@@ -117,6 +116,7 @@ class GoogleTts implements TtsProvider {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
           input: { text },
           voice: { languageCode: 'en-US', name: this.voice },
@@ -162,22 +162,15 @@ export function getTtsProvider(): TtsProvider {
 
 // ── High-level helpers ─────────────────────────────────────────────
 
-export async function speakOne(text: string): Promise<void> {
+export async function speakOne(text: string, signal?: AbortSignal): Promise<void> {
   if (!text) return;
   if (quickClip(text)) return;
-  await getTtsProvider().speak(text);
+  await getTtsProvider().speak(text, signal);
 }
 
-export async function speakChunked(response: string, gap: number): Promise<void> {
+export async function speakChunked(response: string, gap: number, signal?: AbortSignal): Promise<void> {
   if (!response) return;
 
   beepStart();
-
-  const chunks = splitResponse(response);
-  for (let i = 0; i < chunks.length; i++) {
-    await speakOne(chunks[i]);
-    if (i < chunks.length - 1) {
-      await new Promise((r) => setTimeout(r, gap * 1000));
-    }
-  }
+  await speakOne(response, signal);
 }
