@@ -10,9 +10,10 @@ interface Props {
 export default function CommandInput({ buffer, cursor, width }: Props) {
   const before = buffer.slice(0, cursor);
   const after = buffer.slice(cursor);
-  const padLen = Math.max(0, width - 2 - buffer.length);
+  const padLen = Math.max(0, width - 4 - buffer.length);
   return (
     <Text backgroundColor="#1c1c1c">
+      <Text color="gray">{'  '}</Text>
       <Text color="yellow" bold>{'>'}</Text>
       <Text color="white"> {before}</Text>
       <Text color="yellow">█</Text>

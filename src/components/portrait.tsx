@@ -71,11 +71,12 @@ export default function Portrait({ animate, maxLines }: Props) {
   }
 
   const display = maxLines != null ? rows.slice(0, maxLines) : rows;
+  const padded = ['', ...display.map((l) => ' ' + l), ''];
 
   return (
     <Box flexShrink={0}>
       <Text color="green" backgroundColor="#1c1c1c">
-        {display.join('\n')}
+        {padded.join('\n')}
       </Text>
     </Box>
   );

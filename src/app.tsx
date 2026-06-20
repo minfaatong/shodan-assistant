@@ -247,15 +247,15 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const tooSmall = rows < MIN_ROWS || cols < MIN_COLS;
 
-  let portraitLines = 33;
-  if (rows < 36) portraitLines = 20;
-  if (rows < 27) portraitLines = 15;
+  let portraitLines = 31;
+  if (rows < 36) portraitLines = 18;
+  if (rows < 27) portraitLines = 13;
 
   const showRule = rows >= 25;
 
   const hasOverlay = inputMode.type !== 'none';
   const headerRows = 1 + (showRule ? 1 : 0);
-  const contentRows = rows - headerRows - 1;
+  const contentRows = rows - headerRows - 2;
   const maxChatLines = Math.max(15, contentRows);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
@@ -314,12 +314,18 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         </Box>
       </Box>
 
-      <Box marginX={1} marginBottom={1}>
+      <Box marginX={1}>
         <CommandInput buffer={textBuffer} cursor={textCursor} width={cols - 2} />
       </Box>
 
+      <Box marginX={1}>
+        <Text backgroundColor="#1c1c1c" color="gray" dimColor>
+          {'  '}{'Ctrl+C quit | /help commands'.padEnd(cols - 6)}
+        </Text>
+      </Box>
+
       {feedbackMsg && (
-        <Box marginX={1} marginBottom={1}>
+        <Box marginX={1}>
           <Text backgroundColor="#1c1c1c" color="green">{feedbackMsg.padEnd(cols - 2)}</Text>
         </Box>
       )}
