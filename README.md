@@ -137,20 +137,45 @@ brew install speech
 
 ## Installation
 
+### Quick install (recommended)
+
+```bash
+npm install -g shodan-assistant
+```
+
+This installs the `shodan` command globally. After setting up prerequisites (see below), run:
+
+```bash
+shodan
+```
+
+### From source
+
 ```bash
 git clone https://github.com/minfaatong/shodan-assistant
 cd shodan-assistant
 npm install
+npm run build
+```
+
+Then run with:
+
+```bash
+# Via the global bin (links local package)
+npm link && shodan
+
+# Or directly with tsx during development
+npm start
 ```
 
 ## Quick start
 
 ```bash
-# All local (requires llama.cpp + speech CLI)
-npm start
+# Make sure prerequisites are set up first (LLM server, STT/TTS tools)
+shodan
 
 # Quiet mode — log only, no spoken output
-npm start -- --silent
+shodan --silent
 ```
 
 ## Configuration
@@ -199,33 +224,36 @@ Google TTS voices (set via runtime `/key` menu or `applySwitch`): `Neural2-D` (m
 ### Examples
 
 ```bash
-# Default: all local
-npm start
+# Default: all local (requires llama.cpp + speech CLI)
+shodan
 
 # OpenRouter for smarter LLM, everything else local
-OPENROUTER_API_KEY=sk-or-... LLM_PROVIDER=openrouter npm start
+OPENROUTER_API_KEY=sk-or-... LLM_PROVIDER=openrouter shodan
 
 # OpenAI for everything
 LLM_PROVIDER=openai STT_PROVIDER=openai TTS_PROVIDER=openai \
-OPENAI_API_KEY=sk-... npm start
+OPENAI_API_KEY=sk-... shodan
 
 # Ollama as LLM backend
-LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.2 npm start
+LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.2 shodan
 
 # whisper.cpp as STT (offline, different model from Qwen3)
-STT_PROVIDER=whispercpp npm start
+STT_PROVIDER=whispercpp shodan
 
 # whisper.cpp with specific model & custom path
-STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin npm start
+STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin shodan
 
 # Cloudflare Workers AI as LLM
-CLOUDFLARE_API_KEY=... CLOUDFLARE_ACCOUNT_ID=... LLM_PROVIDER=cloudflare npm start
+CLOUDFLARE_API_KEY=... CLOUDFLARE_ACCOUNT_ID=... LLM_PROVIDER=cloudflare shodan
 
 # DeepSeek as LLM
-DEEPSEEK_API_KEY=... LLM_PROVIDER=deepseek npm start
+DEEPSEEK_API_KEY=... LLM_PROVIDER=deepseek shodan
 
 # Google STT and/or TTS
-GOOGLE_API_KEY=... STT_PROVIDER=google TTS_PROVIDER=google npm start
+GOOGLE_API_KEY=... STT_PROVIDER=google TTS_PROVIDER=google shodan
+```
+
+All examples also work with `npm start` when developing from a local clone.
 ```
 
 ## Text commands
@@ -327,6 +355,10 @@ Logs are appended — no rotation. The `logs/` directory is git-ignored.
 
 ## CLI flags
 
+```bash
+shodan [options]
+```
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--intro TEXT` | (greeting list) | Override startup greeting |
@@ -389,11 +421,13 @@ interface TtsProvider { name: string; speak(text: string, signal?: AbortSignal):
 # Type-check
 npm run typecheck
 
-# Build
+# Build (compiles src/ → dist/)
 npm run build
 
-# Run with local debugging output
+# Run with local debugging output (no TTS)
 npm start -- --silent
+# or:
+shodan --silent
 ```
 
 ## Legacy
