@@ -63,7 +63,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const showRule = rows >= 25;
 
   const chatHeight = rows - 1 - (showRule ? 1 : 0);
-  const maxChatLines = Math.max(1, chatHeight - 1);
+  const maxChatLines = Math.max(1, chatHeight - 2);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
 
@@ -89,12 +89,12 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       )}
 
       <Box flexDirection="row" flexGrow={1} marginX={1} marginBottom={0}>
-        <Box flexShrink={0} flexDirection="column" marginRight={2}>
+        <Box flexShrink={0} marginRight={2}>
           <Portrait animate={state.status === 'speaking'} maxLines={portraitLines} />
-          <LogPanel logs={state.logs} />
         </Box>
-        <Box flexGrow={1}>
+        <Box flexGrow={1} flexDirection="column">
           <Chat messages={state.conversation} maxLines={maxChatLines} />
+          <LogPanel logs={state.logs} />
         </Box>
       </Box>
     </Box>
