@@ -23,8 +23,7 @@ const INITIAL: AgentState = {
 };
 
 type InputMode =
-  | { type: 'idle' }
-  | { type: 'command'; buffer: string; cursor: number }
+  | { type: 'none' }
   | { type: 'menu'; def: MenuDef; cursor: number }
   | { type: 'keyinput'; buffer: string; cursor: number; prompt: string; onSubmit: (value: string) => CommandResult };
 
@@ -40,10 +39,12 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const { exit } = useApp();
   const ctrlRef = useRef<AgentController | null>(null);
   const { rows, cols } = useTermSize();
-  const [inputMode, setInputMode] = useState<InputMode>({ type: 'idle' });
+  const [inputMode, setInputMode] = useState<InputMode>({ type: 'none' });
   const [chatScrollOffset, setChatScrollOffset] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [textBuffer, setTextBuffer] = useState('');
+  const [textCursor, setTextCursor] = useState(0);
 
   const showFeedback = useCallback((msg: string) => {
     setFeedbackMsg(msg);
@@ -72,7 +73,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     switch (result.type) {
       case 'done':
         showFeedback(result.message);
-        setInputMode({ type: 'idle' });
+        setInputMode({ type: 'none' });
         ctrlRef.current?.resume();
         break;
       case 'menu':
@@ -88,85 +89,22 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     }
   }
 
+  function submitText(text: string) {
+    if (!text.trim()) return;
+    if (text.startsWith('/')) {
+      const result = parseCommand(text);
+      handleCommandResult(result);
+    } else {
+      ctrlRef.current?.submitText(text);
+    }
+    setTextBuffer('');
+    setTextCursor(0);
+  }
+
   useInput((input, key) => {
-    if (inputMode.type === 'idle') {
-      if (input === 'q' || input === '\x03') {
-        ctrlRef.current?.shutdown();
-        exit();
-        return;
-      }
-      if (key.upArrow) {
-        setChatScrollOffset((p) =>
-          Math.min(p + 1, Math.max(0, state.conversation.length - 1)),
-        );
-        return;
-      }
-      if (key.downArrow) {
-        setChatScrollOffset((p) => Math.max(0, p - 1));
-        return;
-      }
-      if (input === '/') {
-        setInputMode({ type: 'command', buffer: '/', cursor: 1 });
-        ctrlRef.current?.pause();
-        return;
-      }
-      return;
-    }
-
-    if (inputMode.type === 'command') {
-      if (key.escape) {
-        setInputMode({ type: 'idle' });
-        ctrlRef.current?.resume();
-        return;
-      }
-      if (key.return) {
-        const result = parseCommand(inputMode.buffer);
-        handleCommandResult(result);
-        return;
-      }
-      if (key.leftArrow) {
-        setInputMode((prev) =>
-          prev.type === 'command'
-            ? { ...prev, cursor: Math.max(1, prev.cursor - 1) }
-            : prev,
-        );
-        return;
-      }
-      if (key.rightArrow) {
-        setInputMode((prev) =>
-          prev.type === 'command'
-            ? { ...prev, cursor: Math.min(prev.buffer.length, prev.cursor + 1) }
-            : prev,
-        );
-        return;
-      }
-      if (key.backspace) {
-        setInputMode((prev) => {
-          if (prev.type !== 'command') return prev;
-          if (prev.cursor <= 1) {
-            ctrlRef.current?.resume();
-            return { type: 'idle' };
-          }
-          const buf = prev.buffer.slice(0, prev.cursor - 1) + prev.buffer.slice(prev.cursor);
-          return { type: 'command', buffer: buf, cursor: prev.cursor - 1 };
-        });
-        return;
-      }
-      if (input) {
-        setInputMode((prev) => {
-          if (prev.type !== 'command') return prev;
-          const buf = prev.buffer.slice(0, prev.cursor) + input + prev.buffer.slice(prev.cursor);
-          return { type: 'command', buffer: buf, cursor: prev.cursor + 1 };
-        });
-        return;
-      }
-      return;
-    }
-
     if (inputMode.type === 'menu') {
       if (key.escape) {
-        setInputMode({ type: 'idle' });
-        ctrlRef.current?.resume();
+        setInputMode({ type: 'none' });
         return;
       }
       if (key.upArrow) {
@@ -195,8 +133,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
     if (inputMode.type === 'keyinput') {
       if (key.escape) {
-        setInputMode({ type: 'idle' });
-        ctrlRef.current?.resume();
+        setInputMode({ type: 'none' });
         return;
       }
       if (key.return) {
@@ -206,8 +143,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
           handleCommandResult(result);
         } else {
           showFeedback('No input entered, cancelled');
-          setInputMode({ type: 'idle' });
-          ctrlRef.current?.resume();
+          setInputMode({ type: 'none' });
         }
         return;
       }
@@ -246,6 +182,51 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       }
       return;
     }
+
+    // Text input mode (none)
+    if (input === 'q' || input === '\x03') {
+      ctrlRef.current?.shutdown();
+      exit();
+      return;
+    }
+    if (key.upArrow) {
+      setChatScrollOffset((p) =>
+        Math.min(p + 1, Math.max(0, state.conversation.length - 1)),
+      );
+      return;
+    }
+    if (key.downArrow) {
+      setChatScrollOffset((p) => Math.max(0, p - 1));
+      return;
+    }
+    if (key.escape) {
+      setTextBuffer('');
+      setTextCursor(0);
+      return;
+    }
+    if (key.return) {
+      submitText(textBuffer);
+      return;
+    }
+    if (key.leftArrow) {
+      setTextCursor((p) => Math.max(0, p - 1));
+      return;
+    }
+    if (key.rightArrow) {
+      setTextCursor((p) => Math.min(textBuffer.length, p + 1));
+      return;
+    }
+    if (key.backspace) {
+      if (textCursor > 0) {
+        setTextBuffer((prev) => prev.slice(0, textCursor - 1) + prev.slice(textCursor));
+        setTextCursor((p) => p - 1);
+      }
+      return;
+    }
+    if (input) {
+      setTextBuffer((prev) => prev.slice(0, textCursor) + input + prev.slice(textCursor));
+      setTextCursor((p) => p + 1);
+    }
   });
 
   const tooSmall = rows < MIN_ROWS || cols < MIN_COLS;
@@ -256,22 +237,38 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const showRule = rows >= 25;
 
-  // Fixed overhead (status bar + optional rule) and dynamic overlay (input/menu/feedback)
-  const hasOverlay = inputMode.type !== 'idle' || feedbackMsg !== null;
-  const overheadRows = 1 + (showRule ? 1 : 0);
-  const overlayRows = hasOverlay ? 1 : 0;
-  const contentRows = rows - overheadRows - overlayRows;
+  const hasOverlay = inputMode.type !== 'none';
+  const headerRows = 1 + (showRule ? 1 : 0);
+  const contentRows = rows - headerRows - 1;
   const maxChatLines = Math.max(15, contentRows);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
+
+  let overlayContent: React.ReactNode = null;
+  if (inputMode.type === 'menu') {
+    overlayContent = <CommandMenu def={inputMode.def} cursor={inputMode.cursor} />;
+  } else if (inputMode.type === 'keyinput') {
+    overlayContent = (
+      <Text>
+        <Text color="yellow">{inputMode.prompt} </Text>
+        <Text>{inputMode.buffer.slice(0, inputMode.cursor)}</Text>
+        <Text color="yellow">█</Text>
+        <Text>{inputMode.buffer.slice(inputMode.cursor)}</Text>
+        <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press ⏎)' : ''}</Text>
+      </Text>
+    );
+  }
+
+  const before = textBuffer.slice(0, textCursor);
+  const after = textBuffer.slice(textCursor);
 
   if (tooSmall) {
     return (
       <Box flexDirection="column" height={rows} alignItems="center" justifyContent="center">
         <Text bold color="green">Shodan Voice Agent</Text>
         <Text> </Text>
-        <Text color="gray">Requires at least {MIN_ROWS} rows &times; {MIN_COLS} columns</Text>
-        <Text color="gray">Current: {rows} &times; {cols}</Text>
+        <Text color="gray">Requires at least {MIN_ROWS} rows × {MIN_COLS} columns</Text>
+        <Text color="gray">Current: {rows} × {cols}</Text>
       </Box>
     );
   }
@@ -296,33 +293,14 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
             maxLines={maxChatLines}
             scrollOffset={chatScrollOffset}
             onScroll={setChatScrollOffset}
+            footer={hasOverlay ? overlayContent : undefined}
           />
         </Box>
       </Box>
 
-      {inputMode.type === 'command' && (
-        <Box marginX={1} marginBottom={1}>
-          <CommandInput buffer={inputMode.buffer} cursor={inputMode.cursor} />
-        </Box>
-      )}
-
-      {inputMode.type === 'keyinput' && (
-        <Box marginX={1} marginBottom={1}>
-          <Text>
-            <Text color="yellow">{inputMode.prompt} </Text>
-            <Text>{inputMode.buffer.slice(0, inputMode.cursor)}</Text>
-            <Text color="yellow">█</Text>
-            <Text>{inputMode.buffer.slice(inputMode.cursor)}</Text>
-            <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press \u23ce)' : ''}</Text>
-          </Text>
-        </Box>
-      )}
-
-      {inputMode.type === 'menu' && (
-        <Box marginX={1} marginBottom={1}>
-          <CommandMenu def={inputMode.def} cursor={inputMode.cursor} />
-        </Box>
-      )}
+      <Box marginX={1} marginBottom={1}>
+        <CommandInput buffer={textBuffer} cursor={textCursor} />
+      </Box>
 
       {feedbackMsg && (
         <Box marginX={1} marginBottom={1}>

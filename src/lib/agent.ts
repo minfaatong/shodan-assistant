@@ -15,6 +15,7 @@ export interface AgentController {
   shutdown: () => void;
   pause: () => void;
   resume: () => void;
+  submitText: (text: string) => void;
 }
 
 export async function runAgent(opts: AgentOptions): Promise<AgentController> {
@@ -26,6 +27,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
   let shutdown = false;
   let paused = false;
+  let pendingText: string | null = null;
   const notify = () => opts.onStateChange({ ...state });
 
   ensureBeeps();
@@ -74,7 +76,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         }
         if (shutdown) break;
 
-        const transcript = await listenOnce();
+        const transcript = pendingText ?? await listenOnce();
+        pendingText = null;
 
         if (shutdown) break;
         if (!transcript || transcript === '(no speech detected)') {
@@ -144,6 +147,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
     },
     resume() {
       paused = false;
+    },
+    submitText(text: string) {
+      pendingText = text;
     },
   };
 
