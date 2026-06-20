@@ -315,12 +315,12 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       </Box>
 
       <Box marginX={1} marginBottom={1}>
-        <CommandInput buffer={textBuffer} cursor={textCursor} />
+        <CommandInput buffer={textBuffer} cursor={textCursor} width={cols - 2} />
       </Box>
 
       {feedbackMsg && (
         <Box marginX={1} marginBottom={1}>
-          <Text color="green">{feedbackMsg}</Text>
+          <Text backgroundColor="#1c1c1c" color="green">{feedbackMsg.padEnd(cols - 2)}</Text>
         </Box>
       )}
     </Box>

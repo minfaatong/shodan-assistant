@@ -74,7 +74,7 @@ export default function Portrait({ animate, maxLines }: Props) {
 
   return (
     <Box flexShrink={0}>
-      <Text color="green">
+      <Text color="green" backgroundColor="#1c1c1c">
         {display.join('\n')}
       </Text>
     </Box>
