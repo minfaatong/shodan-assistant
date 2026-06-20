@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import StatusBar from './components/status-bar.js';
 import Chat from './components/chat.js';
-import LogPanel from './components/log-panel.js';
 import Portrait from './components/portrait.js';
 import CommandInput from './components/command-input.js';
 import CommandMenu from './components/command-menu.js';
@@ -262,28 +261,13 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const overheadRows = 1 + (showRule ? 1 : 0);
   const overlayRows = hasOverlay ? 1 : 0;
   const contentRows = rows - overheadRows - overlayRows;
-
-  // Split right panel: LogPanel 20% (min 4), Chat 70% (min 25)
-  let chatLines: number;
-  let logLines: number;
-  const minSpace = 25 + 4;
-  if (contentRows >= minSpace) {
-    chatLines = Math.round(contentRows * 0.7);
-    logLines = contentRows - chatLines;
-    if (chatLines < 25) { chatLines = 25; logLines = contentRows - 25; }
-    if (logLines < 4) { logLines = 4; chatLines = contentRows - 4; }
-  } else {
-    chatLines = Math.min(25, Math.max(15, contentRows - 1));
-    logLines = contentRows - chatLines;
-  }
-  const maxChatLines = Math.max(1, chatLines);
-  const maxLogLines = Math.max(1, logLines);
+  const maxChatLines = Math.max(15, contentRows);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
 
   if (tooSmall) {
     return (
-      <Box flexDirection="column" minHeight="100%" alignItems="center" justifyContent="center">
+      <Box flexDirection="column" height={rows} alignItems="center" justifyContent="center">
         <Text bold color="green">Shodan Voice Agent</Text>
         <Text> </Text>
         <Text color="gray">Requires at least {MIN_ROWS} rows &times; {MIN_COLS} columns</Text>
@@ -293,7 +277,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   }
 
   return (
-    <Box flexDirection="column" minHeight="100%">
+    <Box flexDirection="column" height={rows}>
       <StatusBar status={state.status} rightLabel={providerLabel} />
 
       {showRule && (
@@ -313,7 +297,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
             scrollOffset={chatScrollOffset}
             onScroll={setChatScrollOffset}
           />
-          <LogPanel logs={state.logs} maxLines={maxLogLines} />
         </Box>
       </Box>
 

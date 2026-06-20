@@ -36,7 +36,7 @@ export default function StatusBar({ status, rightLabel }: Props) {
     <Box>
       <Box flexShrink={0}>
         <Text color={cfg.color} bold>
-          {showSpinner ? `${spinner} ` : '○ '}{cfg.label}
+          {'\u001b[40m'}{showSpinner ? `${spinner} ` : '○ '}{cfg.label}
         </Text>
         <Text color="gray"> — Shodan Voice Agent</Text>
       </Box>

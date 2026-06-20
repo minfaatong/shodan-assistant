@@ -175,7 +175,6 @@ export async function speakChunked(response: string, gap: number): Promise<void>
 
   const chunks = splitResponse(response);
   for (let i = 0; i < chunks.length; i++) {
-    console.log(`[Speaker] [SHODAN] ${chunks[i]}`);
     await speakOne(chunks[i]);
     if (i < chunks.length - 1) {
       await new Promise((r) => setTimeout(r, gap * 1000));

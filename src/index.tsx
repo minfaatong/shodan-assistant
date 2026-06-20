@@ -32,7 +32,11 @@ Options:
   process.exit(0);
 }
 
+const BG_BLACK = '\x1b[40m';
+const BG_RESET = '\x1b[49m';
+
 function exitAltScreen() {
+  process.stdout.write(BG_RESET);
   process.stdout.write('\x1b[?1049l');
 }
 
@@ -40,6 +44,7 @@ process.on('SIGINT', () => { exitAltScreen(); process.exit(0); });
 process.on('SIGTERM', () => { exitAltScreen(); process.exit(0); });
 
 process.stdout.write('\x1b[?1049h');
+process.stdout.write(BG_BLACK);
 
 try {
   const { waitUntilExit } = render(

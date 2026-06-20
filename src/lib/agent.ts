@@ -11,10 +11,6 @@ import { bootProfile } from './profiles.js';
 
 const execFile = promisify(execFileCb);
 
-function ts(): string {
-  return new Date().toTimeString().slice(0, 8);
-}
-
 export interface AgentController {
   shutdown: () => void;
   pause: () => void;
@@ -30,26 +26,17 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
   let shutdown = false;
   let paused = false;
-  const notify = () => opts.onStateChange({ ...state, logs: [...state.logs] });
+  const notify = () => opts.onStateChange({ ...state });
 
   ensureBeeps();
-
-  if (bootProfile()) {
-    pushLog('Default profile loaded');
-  }
+  bootProfile();
 
   if (!opts.noWarmup) {
-    pushLog('Warming up ASR…');
-    notify();
     const sttName = getSttProvider().name;
     if (sttName.startsWith('local') || sttName.startsWith('Qwen')) {
       await execFile('bash', [PATHS.LISTEN_SH, 'qwen3', '--warmup'], { timeout: 120_000 });
     }
-    pushLog('ASR ready');
-    notify();
 
-    pushLog('Warming up TTS…');
-    notify();
     const ttsName = getTtsProvider().name;
     if (ttsName.startsWith('local') || ttsName.startsWith('Kokoro')) {
       const out = `/tmp/_shodan_warmup_${process.pid}.wav`;
@@ -61,12 +48,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         }
       }
     }
-    pushLog('TTS ready');
-    notify();
   }
 
   const greeting = opts.intro ?? GREETINGS[0];
-  pushLog(greeting);
   notify();
 
   if (!opts.silent) {
@@ -99,7 +83,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
             consecutiveEmpty = 0;
             const g = GREETINGS[reGreetTurn % GREETINGS.length];
             reGreetTurn++;
-            pushLog(g);
             notify();
             speakChunked(g, opts.gap ?? 1.2).catch(() => {});
           }
@@ -112,7 +95,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         const sw = parseSwitchCommand(transcript);
         if (sw) {
           const msg = applySwitch(sw);
-          pushLog(msg);
           state.conversation = [...state.conversation, { role: 'user', text: transcript }];
           notify();
           if (!opts.silent) {
@@ -123,7 +105,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         // ───────────────────────────────────────────────────────────
 
         setSt('thinking');
-        pushLog(`[YOU] ${transcript}`);
         state.conversation = [...state.conversation, { role: 'user', text: transcript }];
         notify();
 
@@ -131,7 +112,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         if (shutdown) break;
 
         if (reply) {
-          pushLog(`[SHODAN] ${reply}`);
           state.conversation = [...state.conversation, { role: 'assistant', text: reply }];
           setSt('speaking');
           notify();
@@ -143,14 +123,11 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
           setSt('listening');
           notify();
         } else {
-          pushLog('[LLM] no response');
           setSt('listening');
           notify();
         }
       } catch (err: unknown) {
         if (shutdown) break;
-        const msg = err instanceof Error ? err.message : String(err);
-        pushLog(`Error: ${msg}`);
         setSt('idle');
         notify();
         await new Promise((r) => setTimeout(r, 1000));
@@ -169,11 +146,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
       paused = false;
     },
   };
-
-  function pushLog(msg: string): void {
-    const line = `[${ts()}] ${msg}`;
-    state.logs = [...state.logs.slice(-99), line];
-  }
 
   function setSt(st: Status): void {
     state.status = st;
