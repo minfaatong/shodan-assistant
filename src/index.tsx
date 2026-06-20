@@ -18,7 +18,7 @@ const { values } = parseArgs({
 
 if (values.help) {
   console.log(`
-shodan-assistant \u2014 Voice AI Agent with Terminal UI
+shodan-assistant — Voice AI Agent with Terminal UI
 
 Usage: tsx src/index.tsx [options]
 
@@ -32,13 +32,26 @@ Options:
   process.exit(0);
 }
 
-const { waitUntilExit } = render(
-  <App
-    intro={typeof values.intro === 'string' ? values.intro : undefined}
-    gap={typeof values.gap === 'string' ? parseFloat(values.gap) : undefined}
-    silent={values.silent === true}
-    noWarmup={values['no-warmup'] === true}
-  />,
-);
+function exitAltScreen() {
+  process.stdout.write('\x1b[?1049l');
+}
 
-await waitUntilExit();
+process.on('SIGINT', () => { exitAltScreen(); process.exit(0); });
+process.on('SIGTERM', () => { exitAltScreen(); process.exit(0); });
+
+process.stdout.write('\x1b[?1049h');
+
+try {
+  const { waitUntilExit } = render(
+    <App
+      intro={typeof values.intro === 'string' ? values.intro : undefined}
+      gap={typeof values.gap === 'string' ? parseFloat(values.gap) : undefined}
+      silent={values.silent === true}
+      noWarmup={values['no-warmup'] === true}
+    />,
+  );
+
+  await waitUntilExit();
+} finally {
+  exitAltScreen();
+}

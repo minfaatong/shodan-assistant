@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, useApp, useInput, Text } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import StatusBar from './components/status-bar.js';
 import Chat from './components/chat.js';
 import LogPanel from './components/log-panel.js';
 import Portrait from './components/portrait.js';
+import { useTermSize } from './lib/use-term-size.js';
 import { runAgent } from './lib/agent.js';
 import { getLlmProvider } from './lib/llm.js';
 import { getSttProvider } from './lib/listener.js';
@@ -11,6 +12,8 @@ import { getTtsProvider } from './lib/speaker.js';
 import type { AgentState } from './lib/types.js';
 import type { AgentController } from './lib/agent.js';
 
+const MIN_ROWS = 22;
+const MIN_COLS = 60;
 const INITIAL: AgentState = {
   status: 'starting',
   conversation: [],
@@ -28,6 +31,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const [state, setState] = useState<AgentState>(INITIAL);
   const { exit } = useApp();
   const ctrlRef = useRef<AgentController | null>(null);
+  const { rows, cols } = useTermSize();
 
   useEffect(() => {
     runAgent({
@@ -50,27 +54,47 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     }
   });
 
+  const tooSmall = rows < MIN_ROWS || cols < MIN_COLS;
+
+  let portraitLines = 33;
+  if (rows < 36) portraitLines = 20;
+  if (rows < 27) portraitLines = 15;
+
+  const showRule = rows >= 25;
+
+  const chatHeight = rows - 1 - (showRule ? 1 : 0);
+  const maxChatLines = Math.max(1, chatHeight - 1);
+
+  const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
+
+  if (tooSmall) {
+    return (
+      <Box flexDirection="column" minHeight="100%" alignItems="center" justifyContent="center">
+        <Text bold color="green">Shodan Voice Agent</Text>
+        <Text> </Text>
+        <Text color="gray">Requires at least {MIN_ROWS} rows &times; {MIN_COLS} columns</Text>
+        <Text color="gray">Current: {rows} &times; {cols}</Text>
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column" minHeight="100%">
-      <StatusBar status={state.status} />
+      <StatusBar status={state.status} rightLabel={providerLabel} />
 
-      <Box flexGrow={1} marginX={1}>
-        <Chat messages={state.conversation} />
-      </Box>
+      {showRule && (
+        <Text color="gray" dimColor>
+          {'─'.repeat(Math.max(cols, 40))}
+        </Text>
+      )}
 
-      <Box flexDirection="row" marginX={1} marginBottom={1}>
-        <Portrait />
-        <Box flexDirection="column">
-          <Text color="gray" italic>
-            LLM: {getLlmProvider().name}
-          </Text>
-          <Text color="gray" italic>
-            STT: {getSttProvider().name}
-          </Text>
-          <Text color="gray" italic>
-            TTS: {getTtsProvider().name}
-          </Text>
+      <Box flexDirection="row" flexGrow={1} marginX={1} marginBottom={0}>
+        <Box flexShrink={0} flexDirection="column" marginRight={2}>
+          <Portrait animate={state.status === 'speaking'} maxLines={portraitLines} />
           <LogPanel logs={state.logs} />
+        </Box>
+        <Box flexGrow={1}>
+          <Chat messages={state.conversation} maxLines={maxChatLines} />
         </Box>
       </Box>
     </Box>
