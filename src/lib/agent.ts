@@ -7,6 +7,7 @@ import { listenOnce, getSttProvider } from './listener.js';
 import { speakChunked, getTtsProvider } from './speaker.js';
 import { getLlmProvider } from './llm.js';
 import { parseSwitchCommand, applySwitch } from './runtime-config.js';
+import { bootProfile } from './profiles.js';
 
 const execFile = promisify(execFileCb);
 
@@ -37,6 +38,13 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   pushLog(`LLM: ${getLlmProvider().name}`);
   pushLog(`STT: ${getSttProvider().name}`);
   pushLog(`TTS: ${getTtsProvider().name}`);
+
+  if (bootProfile()) {
+    pushLog('Default profile loaded');
+    pushLog(`LLM: ${getLlmProvider().name}`);
+    pushLog(`STT: ${getSttProvider().name}`);
+    pushLog(`TTS: ${getTtsProvider().name}`);
+  }
 
   if (!opts.noWarmup) {
     pushLog('Warming up ASR…');

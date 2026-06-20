@@ -9,7 +9,7 @@ import {
   setApiKey,
   resetRuntimeConfig,
 } from './runtime-config.js';
-import { saveProfile, loadProfile, listProfiles, deleteProfile } from './profiles.js';
+import { saveProfile, loadProfile, listProfiles, deleteProfile, setDefaultProfile, getDefaultProfile, clearDefaultProfile } from './profiles.js';
 
 export interface MenuItem {
   id: string;
@@ -224,12 +224,18 @@ function buildModelMenu(kind: ProviderKind, providerId: string): CommandResult {
 
 function buildProfileMenu(): CommandResult {
   const profiles = listProfiles();
+  const defaultName = getDefaultProfile();
+
   const items: MenuItem[] = [
     { id: 'save', label: 'Save current as profile' },
   ];
   if (profiles.length > 0) {
     items.push({ id: 'load', label: 'Load a profile' });
+    items.push({ id: 'set-default', label: `Set default profile${defaultName ? ` (${defaultName})` : ''}` });
     items.push({ id: 'delete', label: 'Delete a profile' });
+  }
+  if (defaultName) {
+    items.push({ id: 'clear-default', label: 'Clear default profile' });
   }
   items.push({ id: 'default', label: 'Reset all to defaults' });
 
@@ -259,6 +265,21 @@ function buildProfileMenu(): CommandResult {
                 onSelect: (pi) => ({ type: 'done', message: loadProfile(profiles[pi]) }),
               },
             };
+          case 'set-default':
+            return {
+              type: 'menu',
+              menu: {
+                title: 'Select profile as default',
+                items: profiles.map((p) => ({ id: p, label: p })),
+                onSelect: (pi) => {
+                  setDefaultProfile(profiles[pi]);
+                  return { type: 'done', message: `Profile "${profiles[pi]}" set as default` };
+                },
+              },
+            };
+          case 'clear-default':
+            clearDefaultProfile();
+            return { type: 'done', message: 'Default profile cleared' };
           case 'delete':
             return {
               type: 'menu',
@@ -269,6 +290,7 @@ function buildProfileMenu(): CommandResult {
               },
             };
           case 'default':
+            clearDefaultProfile();
             resetRuntimeConfig();
             return { type: 'done', message: 'All settings reset to defaults' };
           default:

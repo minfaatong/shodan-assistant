@@ -25,9 +25,9 @@ const INITIAL: AgentState = {
 
 type InputMode =
   | { type: 'idle' }
-  | { type: 'command'; buffer: string }
+  | { type: 'command'; buffer: string; cursor: number }
   | { type: 'menu'; def: MenuDef; cursor: number }
-  | { type: 'keyinput'; buffer: string; prompt: string; onSubmit: (value: string) => CommandResult };
+  | { type: 'keyinput'; buffer: string; cursor: number; prompt: string; onSubmit: (value: string) => CommandResult };
 
 interface Props {
   intro?: string;
@@ -69,6 +69,26 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     };
   }, []);
 
+  function handleCommandResult(result: CommandResult) {
+    switch (result.type) {
+      case 'done':
+        showFeedback(result.message);
+        setInputMode({ type: 'idle' });
+        ctrlRef.current?.resume();
+        break;
+      case 'menu':
+        setInputMode({ type: 'menu', def: result.menu, cursor: 0 });
+        break;
+      case 'keyinput':
+        setInputMode({ type: 'keyinput', buffer: '', cursor: 0, prompt: result.prompt, onSubmit: result.onSubmit });
+        break;
+      case 'quit':
+        ctrlRef.current?.shutdown();
+        exit();
+        break;
+    }
+  }
+
   useInput((input, key) => {
     if (inputMode.type === 'idle') {
       if (input === 'q' || input === '\x03') {
@@ -87,7 +107,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         return;
       }
       if (input === '/') {
-        setInputMode({ type: 'command', buffer: '/' });
+        setInputMode({ type: 'command', buffer: '/', cursor: 1 });
         ctrlRef.current?.pause();
         return;
       }
@@ -105,22 +125,40 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         handleCommandResult(result);
         return;
       }
+      if (key.leftArrow) {
+        setInputMode((prev) =>
+          prev.type === 'command'
+            ? { ...prev, cursor: Math.max(1, prev.cursor - 1) }
+            : prev,
+        );
+        return;
+      }
+      if (key.rightArrow) {
+        setInputMode((prev) =>
+          prev.type === 'command'
+            ? { ...prev, cursor: Math.min(prev.buffer.length, prev.cursor + 1) }
+            : prev,
+        );
+        return;
+      }
       if (key.backspace) {
-        const next = inputMode.buffer.slice(0, -1);
-        if (next === '' || next === '/') {
-          setInputMode({ type: 'idle' });
-          ctrlRef.current?.resume();
-        } else {
-          setInputMode({ type: 'command', buffer: next });
-        }
+        setInputMode((prev) => {
+          if (prev.type !== 'command') return prev;
+          if (prev.cursor <= 1) {
+            ctrlRef.current?.resume();
+            return { type: 'idle' };
+          }
+          const buf = prev.buffer.slice(0, prev.cursor - 1) + prev.buffer.slice(prev.cursor);
+          return { type: 'command', buffer: buf, cursor: prev.cursor - 1 };
+        });
         return;
       }
       if (input) {
-        setInputMode((prev) =>
-          prev.type === 'command'
-            ? { type: 'command', buffer: prev.buffer + input }
-            : prev,
-        );
+        setInputMode((prev) => {
+          if (prev.type !== 'command') return prev;
+          const buf = prev.buffer.slice(0, prev.cursor) + input + prev.buffer.slice(prev.cursor);
+          return { type: 'command', buffer: buf, cursor: prev.cursor + 1 };
+        });
         return;
       }
       return;
@@ -174,47 +212,42 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         }
         return;
       }
-      if (key.backspace) {
+      if (key.leftArrow) {
         setInputMode((prev) =>
           prev.type === 'keyinput'
-            ? { ...prev, buffer: prev.buffer.slice(0, -1) }
+            ? { ...prev, cursor: Math.max(0, prev.cursor - 1) }
             : prev,
         );
         return;
       }
-      if (input) {
+      if (key.rightArrow) {
         setInputMode((prev) =>
           prev.type === 'keyinput'
-            ? { ...prev, buffer: prev.buffer + input }
+            ? { ...prev, cursor: Math.min(prev.buffer.length, prev.cursor + 1) }
             : prev,
         );
+        return;
+      }
+      if (key.backspace) {
+        setInputMode((prev) => {
+          if (prev.type !== 'keyinput') return prev;
+          if (prev.cursor <= 0) return prev;
+          const buf = prev.buffer.slice(0, prev.cursor - 1) + prev.buffer.slice(prev.cursor);
+          return { ...prev, buffer: buf, cursor: prev.cursor - 1 };
+        });
+        return;
+      }
+      if (input) {
+        setInputMode((prev) => {
+          if (prev.type !== 'keyinput') return prev;
+          const buf = prev.buffer.slice(0, prev.cursor) + input + prev.buffer.slice(prev.cursor);
+          return { ...prev, buffer: buf, cursor: prev.cursor + 1 };
+        });
         return;
       }
       return;
     }
   });
-
-  function handleCommandResult(
-    result: CommandResult,
-  ) {
-    switch (result.type) {
-      case 'done':
-        showFeedback(result.message);
-        setInputMode({ type: 'idle' });
-        ctrlRef.current?.resume();
-        break;
-      case 'menu':
-        setInputMode({ type: 'menu', def: result.menu, cursor: 0 });
-        break;
-      case 'keyinput':
-        setInputMode({ type: 'keyinput', buffer: '', prompt: result.prompt, onSubmit: result.onSubmit });
-        break;
-      case 'quit':
-        ctrlRef.current?.shutdown();
-        exit();
-        break;
-    }
-  }
 
   const tooSmall = rows < MIN_ROWS || cols < MIN_COLS;
 
@@ -267,7 +300,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
       {inputMode.type === 'command' && (
         <Box marginX={1} marginBottom={1}>
-          <CommandInput buffer={inputMode.buffer} />
+          <CommandInput buffer={inputMode.buffer} cursor={inputMode.cursor} />
         </Box>
       )}
 
@@ -275,7 +308,9 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         <Box marginX={1} marginBottom={1}>
           <Text>
             <Text color="yellow">{inputMode.prompt} </Text>
-            <Text>{inputMode.buffer.length > 0 ? '\u2022'.repeat(Math.max(1, inputMode.buffer.length)) : ''}</Text>
+            <Text>{inputMode.buffer.slice(0, inputMode.cursor)}</Text>
+            <Text color="yellow">█</Text>
+            <Text>{inputMode.buffer.slice(inputMode.cursor)}</Text>
             <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press \u23ce)' : ''}</Text>
           </Text>
         </Box>
