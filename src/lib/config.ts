@@ -24,7 +24,7 @@ export const LLAMA_BASE = env.LLAMA_BASE ?? 'http://127.0.0.1:8080/v1';
 export const LLAMA_MODEL = env.LLAMA_MODEL ?? 'Qwen3-8B-Q8_0.gguf';
 export const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY ?? '';
 export const OPENROUTER_MODEL = env.OPENROUTER_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
-export const OLLAMA_BASE = env.OLLAMA_BASE ?? 'http://127.0.0.1:11434';
+export const OLLAMA_BASE = env.OLLAMA_BASE ?? 'http://127.0.0.1:11434/v1';
 export const OLLAMA_MODEL = env.OLLAMA_MODEL ?? 'llama3.2';
 
 // ── STT ────────────────────────────────────────────────────────────
