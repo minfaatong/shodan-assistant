@@ -49,7 +49,7 @@ BEEP_END   = "/tmp/beep_end.wav"     # played twice — end of recording
 # ── Defaults ─────────────────────────────────────────────────────
 
 LLAMA_BASE    = os.environ.get("LLAMA_BASE",  "http://127.0.0.1:8080/v1")
-LLAMA_MODEL   = os.environ.get("LLAMA_MODEL", "gemma4-e4b")
+LLAMA_MODEL   = os.environ.get("LLAMA_MODEL", "Qwen3-8B-Q8_0.gguf")
 SYSTEM_PROMPT = (
     "You are Shodan, a calm, direct voice assistant. "
     "Keep responses short — one or two sentences maximum. "
@@ -124,6 +124,29 @@ def beep_end():
         pass
 
 
+def ensure_beeps():
+    """Generate beep WAV files if they don't exist."""
+    import struct
+    import wave
+    for path, freq, dur in [
+        (BEEP_START, 880, 0.08),
+        (BEEP_END,   660, 0.10),
+    ]:
+        if not os.path.exists(path):
+            sr = 22050
+            n = int(sr * dur)
+            frames = b"".join(
+                struct.pack("<h", int(0.5 * 32767 * (
+                    1.0 if t < n // 2 else -1.0
+                ))) for t in range(n)
+            )
+            with wave.open(path, "w") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(sr)
+                w.writeframes(frames)
+
+
 # ── Quick clip playback ───────────────────────────────────────────
 
 def quick(text: str) -> bool:
@@ -166,10 +189,11 @@ def tts(text: str):
     except Exception as e:
         _log(f"[TTS] error: {e}")
     finally:
-        try:
-            os.unlink(out)
-        except OSError:
-            pass
+        for p in (out, out.replace(".wav", "_slow.wav")):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
 
 
 def speak(text: str):
@@ -235,8 +259,7 @@ def listener_thread():
     _log("[Listener] started — continuous listening active")
     while not shutdown_ev.is_set():
         try:
-            # Blocking wait for next recording+transcription
-            # listen_stream.sh times out internally on silence
+            _log("[Listener] 🎤 Listening...")
             r = subprocess.run(
                 ["bash", str(LISTEN_SH), "qwen3"],
                 capture_output=True, timeout=120,
@@ -244,8 +267,6 @@ def listener_thread():
             txt = r.stdout.decode("utf-8", errors="replace").strip()
             if shutdown_ev.is_set():
                 break
-            # 2× beep: end of recording
-            beep_end()
             if not txt or txt == "(no speech detected)":
                 continue
             _log(f"[Listener] [YOU] {txt}")
@@ -344,10 +365,11 @@ def warmup():
         [str(SAY_SH), "warmup", out],
         capture_output=True, timeout=90,
     )
-    try:
-        os.unlink(out)
-    except OSError:
-        pass
+    for p in (out, out.replace(".wav", "_slow.wav")):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
     _log("TTS ready")
 
 
@@ -372,6 +394,8 @@ def main():
         help="Skip warmup step",
     )
     args = parser.parse_args()
+
+    ensure_beeps()
 
     _log("=" * 52)
     _log("  Shodan Agent  (multi-threaded)")

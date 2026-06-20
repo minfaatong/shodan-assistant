@@ -10,12 +10,14 @@
 set -euo pipefail
 
 WARMUP=false
+RECORD_ONLY=false
 ENGINE="qwen3"
 
-# Parse args — --warmup may appear in any position
+# Parse args — flags may appear in any position
 for arg in "$@"; do
     case "$arg" in
         --warmup) WARMUP=true ;;
+        --record-only) RECORD_ONLY=true ;;
         qwen3|whisper|parakeet|nemotron|omnilingual) ENGINE="$arg" ;;
         *) echo "Unknown arg: $arg" >&2; exit 1 ;;
     esac
@@ -40,7 +42,12 @@ rec -q -c 1 -b 16 "$OUTPUT" silence 1 0.3 3% 1 2.0 3% 2>/dev/null
 # Beep → recording stopped
 afplay "$BEEP_END" 2>/dev/null || true
 
-echo "⏳ Transcribing (engine: $ENGINE)..."
+if $RECORD_ONLY; then
+    echo "$OUTPUT"
+    exit 0
+fi
+
+echo "⏳ Transcribing (engine: $ENGINE)..." >&2
 
 case "$ENGINE" in
   whisper)
@@ -48,7 +55,7 @@ case "$ENGINE" in
     RESULT=$(tail -1 "${OUTPUT}.txt" 2>/dev/null)
     ;;
   qwen3|parakeet|nemotron|omnilingual)
-    RESULT=$(speech transcribe "$OUTPUT" --engine "$ENGINE" 2>/dev/null)
+    RESULT=$(speech transcribe "$OUTPUT" --engine "$ENGINE" 2>/dev/null | sed -n 's/^Result: //p') || true
     ;;
   *)
     echo "Unknown engine: $ENGINE (use: qwen3, whisper, parakeet, nemotron, omnilingual)"
