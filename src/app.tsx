@@ -257,8 +257,27 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const showRule = rows >= 25;
 
-  const chatHeight = rows - 1 - (showRule ? 1 : 0);
-  const maxChatLines = Math.max(1, chatHeight - 2);
+  // Fixed overhead (status bar + optional rule) and dynamic overlay (input/menu/feedback)
+  const hasOverlay = inputMode.type !== 'idle' || feedbackMsg !== null;
+  const overheadRows = 1 + (showRule ? 1 : 0);
+  const overlayRows = hasOverlay ? 1 : 0;
+  const contentRows = rows - overheadRows - overlayRows;
+
+  // Split right panel: LogPanel 20% (min 4), Chat 70% (min 25)
+  let chatLines: number;
+  let logLines: number;
+  const minSpace = 25 + 4;
+  if (contentRows >= minSpace) {
+    chatLines = Math.round(contentRows * 0.7);
+    logLines = contentRows - chatLines;
+    if (chatLines < 25) { chatLines = 25; logLines = contentRows - 25; }
+    if (logLines < 4) { logLines = 4; chatLines = contentRows - 4; }
+  } else {
+    chatLines = Math.min(25, Math.max(15, contentRows - 1));
+    logLines = contentRows - chatLines;
+  }
+  const maxChatLines = Math.max(1, chatLines);
+  const maxLogLines = Math.max(1, logLines);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
 
@@ -294,7 +313,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
             scrollOffset={chatScrollOffset}
             onScroll={setChatScrollOffset}
           />
-          <LogPanel logs={state.logs} />
+          <LogPanel logs={state.logs} maxLines={maxLogLines} />
         </Box>
       </Box>
 

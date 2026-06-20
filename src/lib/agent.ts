@@ -34,16 +34,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
   ensureBeeps();
 
-  // Show providers
-  pushLog(`LLM: ${getLlmProvider().name}`);
-  pushLog(`STT: ${getSttProvider().name}`);
-  pushLog(`TTS: ${getTtsProvider().name}`);
-
   if (bootProfile()) {
     pushLog('Default profile loaded');
-    pushLog(`LLM: ${getLlmProvider().name}`);
-    pushLog(`STT: ${getSttProvider().name}`);
-    pushLog(`TTS: ${getTtsProvider().name}`);
   }
 
   if (!opts.noWarmup) {
