@@ -1,31 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React, { useEffect, useRef } from 'react';
+import { Box, Text } from 'ink';
 import type { Message } from '../lib/types.js';
 
 interface Props {
   messages: Message[];
   maxLines: number;
+  scrollOffset: number;
+  onScroll: (offset: number) => void;
 }
 
-export default function Chat({ messages, maxLines }: Props) {
-  const [scrollOffset, setScrollOffset] = useState(0);
+export default function Chat({ messages, maxLines, scrollOffset, onScroll }: Props) {
   const prevLen = useRef(messages.length);
 
   useEffect(() => {
     if (messages.length > prevLen.current) {
-      setScrollOffset(0);
+      onScroll(0);
     }
     prevLen.current = messages.length;
-  }, [messages.length]);
-
-  useInput((_input, key) => {
-    if (key.upArrow) {
-      setScrollOffset((p) => Math.min(p + 1, messages.length - 1));
-    }
-    if (key.downArrow) {
-      setScrollOffset((p) => Math.max(0, p - 1));
-    }
-  });
+  }, [messages.length, onScroll]);
 
   const end = Math.max(0, messages.length - scrollOffset);
   const start = Math.max(0, end - maxLines);
@@ -35,7 +27,7 @@ export default function Chat({ messages, maxLines }: Props) {
     return (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <Text color="gray" italic>
-          Waiting for conversation…
+          Waiting for conversation\u2026
         </Text>
       </Box>
     );

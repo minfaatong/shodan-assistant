@@ -16,6 +16,8 @@ function ts(): string {
 
 export interface AgentController {
   shutdown: () => void;
+  pause: () => void;
+  resume: () => void;
 }
 
 export async function runAgent(opts: AgentOptions): Promise<AgentController> {
@@ -26,6 +28,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   };
 
   let shutdown = false;
+  let paused = false;
   const notify = () => opts.onStateChange({ ...state, logs: [...state.logs] });
 
   ensureBeeps();
@@ -79,8 +82,13 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   (async function loop() {
     while (!shutdown) {
       try {
-        setSt('listening');
+        setSt(paused ? 'idle' : 'listening');
         notify();
+
+        while (paused && !shutdown) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (shutdown) break;
 
         const transcript = await listenOnce();
 
@@ -153,6 +161,12 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   return {
     shutdown() {
       shutdown = true;
+    },
+    pause() {
+      paused = true;
+    },
+    resume() {
+      paused = false;
     },
   };
 

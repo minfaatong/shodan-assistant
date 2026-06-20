@@ -36,11 +36,17 @@ The agent runs inside an interactive terminal UI built with `ink` (React for CLI
 | Element | Description |
 |---------|-------------|
 | Status bar | Current state (Listening/Thinking/Speaking) with spinner |
-| Chat log | Persistent conversation (static, appended per message) |
+| Chat log | Persistent conversation (static, appended per message), scrollable |
 | Log line | Last log entry at the bottom |
+| Command input | `> /command█` bar when typing a slash command |
+| Command menu | Selectable list for provider/model switching |
 
 ### Controls
 - `q` or `Ctrl+C` — quit
+- `↑`/`↓` (idle) — scroll chat history
+- `/` — enter command mode
+- `Esc` (command/menu) — cancel, return to idle
+- `⏎` (menu) — select highlighted item
 
 ## Components
 
@@ -65,9 +71,12 @@ The agent runs inside an interactive terminal UI built with `ink` (React for CLI
 - `src/lib/config.ts` — paths and defaults
 - `src/lib/runtime-config.ts` — runtime provider/model switching (voice-activated)
 - `src/lib/split.ts` — response chunking
+- `src/lib/commands.ts` — slash command parser and menu builders
 - `src/components/status-bar.tsx` — status indicator
 - `src/components/chat.tsx` — conversation display
 - `src/components/log-panel.tsx` — log line
+- `src/components/command-input.tsx` — inline command input bar
+- `src/components/command-menu.tsx` — selectable provider/model list
 - `scripts/listen_stream.sh` — STT/recording loop
 - `scripts/say.sh` — TTS synthesis
 - `shodan_agent.py` — (legacy Python version, kept for reference)
@@ -138,7 +147,24 @@ STT_PROVIDER=whispercpp npm start
 STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin npm start
 ```
 
-## Runtime switching
+## Text commands
+
+Type `/` to enter command mode. Available commands:
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help text |
+| `/provider` | Switch LLM / STT / TTS provider |
+| `/llm` | Switch LLM provider or model |
+| `/stt` | Switch STT provider |
+| `/tts` | Switch TTS provider |
+| `/model` | Switch model for current LLM provider |
+| `/quit` | Exit the application |
+
+Commands show an interactive selection list for provider/model choices.
+Text commands pause the voice agent loop while the menu is active.
+
+## Runtime switching (voice)
 
 Providers and models can be changed mid-session by voice. Say any of:
 
@@ -204,3 +230,4 @@ The canonical project lives in `~/Documents/dev/projs/shodan-assistant/`. The sk
 - 2026-06-20: High-pitch/glitchy voice from `atempo` phase vocoder artifacts. Replaced with rubberband filter at 70% tempo.
 - 2026-06-20: `echo "⏳ Transcribing..."` leaked to stdout, corrupting transcript sent to LLM. Moved to stderr.
 - 2026-06-20: Beep files missing, model name mismatch, no visual listening indicator. Fixed in migration to ink TUI.
+- 2026-06-20: Text slash commands implemented — `/` enters command mode, parser returns `done`/`menu`/`quit` results, menus render as selectable lists. Agent pauses during command interaction. Chat scroll via `↑`/`↓` in idle mode.

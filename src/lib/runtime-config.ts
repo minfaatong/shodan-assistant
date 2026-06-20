@@ -181,7 +181,7 @@ export interface SwitchResult {
   kind: ProviderKind;
   provider: string;
   model?: string;
-  description: string;
+  description?: string;
 }
 
 export function parseSwitchCommand(transcript: string): SwitchResult | null {
