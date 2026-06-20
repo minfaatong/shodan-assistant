@@ -45,6 +45,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [textBuffer, setTextBuffer] = useState('');
   const [textCursor, setTextCursor] = useState(0);
+  const pendingQueue = useRef<string[]>([]);
 
   const showFeedback = useCallback((msg: string) => {
     setFeedbackMsg(msg);
@@ -61,6 +62,8 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       onStateChange: setState,
     }).then((ctrl) => {
       ctrlRef.current = ctrl;
+      for (const t of pendingQueue.current) ctrl.submitText(t);
+      pendingQueue.current = [];
     });
 
     return () => {
@@ -94,8 +97,10 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     if (text.startsWith('/')) {
       const result = parseCommand(text);
       handleCommandResult(result);
+    } else if (ctrlRef.current) {
+      ctrlRef.current.submitText(text);
     } else {
-      ctrlRef.current?.submitText(text);
+      pendingQueue.current.push(text);
     }
     setTextBuffer('');
     setTextCursor(0);
@@ -184,7 +189,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     }
 
     // Text input mode (none)
-    if (input === 'q' || input === '\x03') {
+    if (input === '\x03') {
       ctrlRef.current?.shutdown();
       exit();
       return;
