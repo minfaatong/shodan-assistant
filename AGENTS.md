@@ -46,7 +46,7 @@ The agent runs inside an interactive terminal UI built with `ink` (React for CLI
 
 | Component | Local | Cloud alternatives |
 |-----------|-------|-------------------|
-| **LLM** | llama.cpp (`Qwen3-8B-Q8_0.gguf`) | OpenRouter, Ollama |
+| **LLM** | llama.cpp (`Qwen3-8B-Q8_0.gguf`) | OpenRouter, Ollama, OpenAI |
 | **STT** | listen_stream.sh (Qwen3-ASR), whisper.cpp | OpenAI Whisper |
 | **TTS** | say.sh (Kokoro bf_isabella, 70%) | OpenAI TTS |
 | **Beeps** | Auto-generated WAVs `/tmp/beep_start.wav`, `/tmp/beep_end.wav` | — |
@@ -63,6 +63,7 @@ The agent runs inside an interactive terminal UI built with `ink` (React for CLI
 - `src/lib/llm.ts` — LLM API client
 - `src/lib/beeps.ts` — beep generation and playback
 - `src/lib/config.ts` — paths and defaults
+- `src/lib/runtime-config.ts` — runtime provider/model switching (voice-activated)
 - `src/lib/split.ts` — response chunking
 - `src/components/status-bar.tsx` — status indicator
 - `src/components/chat.tsx` — conversation display
@@ -88,13 +89,14 @@ All providers are configured via environment variables. Local defaults apply whe
 ### LLM providers
 | Env var | Default | Options |
 |---------|---------|---------|
-| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` |
+| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` \| `openai` |
 | `LLAMA_BASE` | `http://127.0.0.1:8080/v1` | any llama.cpp endpoint |
 | `LLAMA_MODEL` | `Qwen3-8B-Q8_0.gguf` | model loaded on server |
 | `OPENROUTER_API_KEY` | — | your OpenRouter API key |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4-20250514` | any OpenRouter model ID |
 | `OLLAMA_BASE` | `http://localhost:11434` | any Ollama endpoint |
 | `OLLAMA_MODEL` | `llama3.2` | any Ollama model |
+| `OPENAI_API_KEY` | — | required for `openai` LLM provider |
 
 ### STT providers
 | Env var | Default | Options |
@@ -135,6 +137,34 @@ STT_PROVIDER=whispercpp npm start
 # whisper.cpp with specific model & custom path
 STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin npm start
 ```
+
+## Runtime switching
+
+Providers and models can be changed mid-session by voice. Say any of:
+
+- `"switch LLM to OpenAI"`
+- `"use OpenRouter for thinking"`
+- `"set TTS to local"`
+- `"change STT to whisper"`
+- `"switch model to claude"` (changes model within current LLM provider)
+
+### Recognized providers
+
+| Category | Recognized names |
+|----------|------------------|
+| LLM | llama.cpp, OpenRouter, Ollama, OpenAI |
+| STT | Qwen3-ASR (local), whisper.cpp, OpenAI Whisper |
+| TTS | Kokoro (local), OpenAI TTS |
+
+### Recognized models
+
+| Provider | Models |
+|----------|--------|
+| OpenRouter | Claude Sonnet 4, GPT-4o, GPT-4o mini, DeepSeek V3, Gemini 2.0 Flash, Qwen 2.5 72B, Llama 3.3 70B |
+| Ollama | Llama 3.2, Qwen3, Mistral, Phi-4, DeepSeek R1 |
+| OpenAI LLM | GPT-4o, GPT-4o mini, GPT-4.1 |
+| whisper.cpp | Tiny, Small, Medium, Large |
+| OpenAI TTS | Alloy, Echo, Fable, Onyx, Nova, Shimmer |
 
 ## Runtime requirements
 

@@ -1,7 +1,8 @@
 import { execFile as execFileCb, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
-import { PATHS, TTS_PROVIDER, OPENAI_API_KEY, OPENAI_TTS_VOICE, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
+import { PATHS, OPENAI_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
+import { getTtsProviderType, getTtsVoice } from './runtime-config.js';
 import { beepStart, beepEnd } from './beeps.js';
 import { splitResponse } from './split.js';
 
@@ -60,7 +61,9 @@ class LocalTts implements TtsProvider {
 // ── OpenAI TTS ─────────────────────────────────────────────────────
 
 class OpenAiTts implements TtsProvider {
-  name = 'OpenAI TTS';
+  private voice: string;
+  constructor(voice?: string) { this.voice = voice ?? 'alloy'; }
+  get name(): string { return `OpenAI TTS (${this.voice})`; }
 
   async speak(text: string): Promise<void> {
     if (!text) return;
@@ -73,7 +76,7 @@ class OpenAiTts implements TtsProvider {
       },
       body: JSON.stringify({
         model: 'tts-1',
-        voice: OPENAI_TTS_VOICE,
+        voice: this.voice,
         input: text,
         response_format: 'mp3',
       }),
@@ -96,21 +99,17 @@ class OpenAiTts implements TtsProvider {
   }
 }
 
-// ── Factory ────────────────────────────────────────────────────────
-
-let _ttsProvider: TtsProvider | null = null;
+// ── Factory (always reads runtime config) ─────────────────────
 
 export function getTtsProvider(): TtsProvider {
-  if (!_ttsProvider) {
-    switch (TTS_PROVIDER) {
-      case 'openai':
-        _ttsProvider = new OpenAiTts();
-        break;
-      default:
-        _ttsProvider = new LocalTts();
-    }
+  const type = getTtsProviderType();
+
+  switch (type) {
+    case 'openai':
+      return new OpenAiTts(getTtsVoice());
+    default:
+      return new LocalTts();
   }
-  return _ttsProvider;
 }
 
 // ── High-level helpers ─────────────────────────────────────────────

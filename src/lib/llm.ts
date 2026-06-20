@@ -1,10 +1,10 @@
 import {
-  LLM_PROVIDER,
-  LLAMA_BASE, LLAMA_MODEL,
-  OPENROUTER_API_KEY, OPENROUTER_MODEL,
-  OLLAMA_BASE, OLLAMA_MODEL,
+  LLAMA_BASE, LLAMA_MODEL as ENV_LLAMA_MODEL,
+  OPENROUTER_API_KEY, OPENROUTER_MODEL as ENV_OPENROUTER_MODEL,
+  OLLAMA_BASE, OLLAMA_MODEL as ENV_OLLAMA_MODEL,
   SYSTEM_PROMPT, LLM_TIMEOUT,
 } from './config.js';
+import { getLlmProviderType, getLlmModel } from './runtime-config.js';
 
 export interface LlmProvider {
   name: string;
@@ -61,10 +61,10 @@ async function chatCompletions(
 // ── llama.cpp ───────────────────────────────────────────────────
 
 class LlamaCppProvider implements LlmProvider {
-  name = `llama.cpp (${LLAMA_MODEL})`;
+  name = `llama.cpp (${ENV_LLAMA_MODEL})`;
 
   async complete(prompt: string): Promise<string> {
-    return chatCompletions(LLAMA_BASE, LLAMA_MODEL, [
+    return chatCompletions(LLAMA_BASE, ENV_LLAMA_MODEL, [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ]);
@@ -74,12 +74,14 @@ class LlamaCppProvider implements LlmProvider {
 // ── OpenRouter ─────────────────────────────────────────────────
 
 class OpenRouterProvider implements LlmProvider {
-  name = `OpenRouter (${OPENROUTER_MODEL})`;
+  private model: string;
+  constructor(model?: string) { this.model = model ?? ENV_OPENROUTER_MODEL; }
+  get name(): string { return `OpenRouter (${this.model})`; }
 
   async complete(prompt: string): Promise<string> {
     return chatCompletions(
       'https://openrouter.ai/api/v1',
-      OPENROUTER_MODEL,
+      this.model,
       [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: prompt },
@@ -92,32 +94,56 @@ class OpenRouterProvider implements LlmProvider {
 // ── Ollama ────────────────────────────────────────────────────
 
 class OllamaProvider implements LlmProvider {
-  name = `Ollama (${OLLAMA_MODEL})`;
+  private model: string;
+  constructor(model?: string) { this.model = model ?? ENV_OLLAMA_MODEL; }
+  get name(): string { return `Ollama (${this.model})`; }
 
   async complete(prompt: string): Promise<string> {
-    return chatCompletions(OLLAMA_BASE, OLLAMA_MODEL, [
+    return chatCompletions(OLLAMA_BASE, this.model, [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ]);
   }
 }
 
-// ── Factory ──────────────────────────────────────────────────
+// ── OpenAI (direct) ────────────────────────────────────────────
 
-let _llmProvider: LlmProvider | null = null;
+class OpenAiLlmProvider implements LlmProvider {
+  private model: string;
+  constructor(model?: string) { this.model = model ?? 'gpt-4o'; }
+  get name(): string { return `OpenAI (${this.model})`; }
+
+  async complete(prompt: string): Promise<string> {
+    return chatCompletions(
+      'https://api.openai.com/v1',
+      this.model,
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+      process.env.OPENAI_API_KEY,
+    );
+  }
+}
+
+// ── Factory (always reads runtime config) ─────────────────────
 
 export function getLlmProvider(): LlmProvider {
-  if (!_llmProvider) {
-    switch (LLM_PROVIDER) {
-      case 'openrouter':
-        _llmProvider = new OpenRouterProvider();
-        break;
-      case 'ollama':
-        _llmProvider = new OllamaProvider();
-        break;
-      default:
-        _llmProvider = new LlamaCppProvider();
-    }
+  const type = getLlmProviderType();
+  const model = getLlmModel();
+
+  switch (type) {
+    case 'openrouter':
+      return new OpenRouterProvider(model);
+    case 'ollama':
+      return new OllamaProvider(model);
+    case 'openai':
+      return new OpenAiLlmProvider(model);
+    default:
+      return new LlamaCppProvider();
   }
-  return _llmProvider;
+}
+
+export function resetLlmProvider(): void {
+  // no cache held; getLlmProvider always creates fresh
 }

@@ -4,9 +4,11 @@ import { createReadStream, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  PATHS, STT_PROVIDER, OPENAI_API_KEY,
-  WHISPER_MODEL, WHISPER_MODEL_PATH, WHISPER_LANG,
+  PATHS, OPENAI_API_KEY,
+  WHISPER_MODEL_PATH as ENV_WHISPER_MODEL_PATH,
+  WHISPER_LANG,
 } from './config.js';
+import { getSttProviderType, getWhisperModel } from './runtime-config.js';
 
 const execFile = promisify(execFileCb);
 
@@ -40,15 +42,19 @@ class LocalStt implements SttProvider {
 // ── whisper.cpp ───────────────────────────────────────────────────
 
 class WhisperCppStt implements SttProvider {
+  private modelSize: string;
+
+  constructor(modelSize?: string) {
+    this.modelSize = modelSize ?? 'small';
+  }
+
   get name(): string {
-    const modelPath = this.resolveModelPath();
-    const basename = modelPath.split('/').pop()?.replace(/^ggml-/, '').replace(/\.bin$/, '') ?? WHISPER_MODEL;
-    return `whisper.cpp (${basename})`;
+    return `whisper.cpp (${this.modelSize})`;
   }
 
   private resolveModelPath(): string {
-    return WHISPER_MODEL_PATH || join(
-      homedir(), '.cache', 'whisper-cpp', `ggml-${WHISPER_MODEL}.bin`,
+    return ENV_WHISPER_MODEL_PATH || join(
+      homedir(), '.cache', 'whisper-cpp', `ggml-${this.modelSize}.bin`,
     );
   }
 
@@ -61,7 +67,7 @@ class WhisperCppStt implements SttProvider {
     if (!existsSync(modelPath)) {
       throw new Error(
         `whisper.cpp model not found at ${modelPath}. ` +
-        `Set WHISPER_MODEL_PATH or download the "${WHISPER_MODEL}" model.`,
+        `Set WHISPER_MODEL_PATH or download the "${this.modelSize}" model.`,
       );
     }
 
@@ -107,12 +113,14 @@ class OpenAiStt implements SttProvider {
   }
 }
 
-// ── Factory ────────────────────────────────────────────────────────
+// ── Factory (always reads runtime config) ────────────────────────
 
 export function createSttProvider(): SttProvider {
-  switch (STT_PROVIDER) {
+  const type = getSttProviderType();
+
+  switch (type) {
     case 'whispercpp':
-      return new WhisperCppStt();
+      return new WhisperCppStt(getWhisperModel());
     case 'openai':
       return new OpenAiStt();
     default:

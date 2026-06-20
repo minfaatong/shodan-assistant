@@ -17,7 +17,7 @@ export const PATHS = {
 
 // ── LLM ────────────────────────────────────────────────────────────
 
-export type LlmProviderType = 'llama' | 'openrouter' | 'ollama';
+export type LlmProviderType = 'llama' | 'openrouter' | 'ollama' | 'openai';
 
 export const LLM_PROVIDER = (env.LLM_PROVIDER ?? 'llama') as LlmProviderType;
 export const LLAMA_BASE = env.LLAMA_BASE ?? 'http://127.0.0.1:8080/v1';

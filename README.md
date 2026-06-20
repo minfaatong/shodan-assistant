@@ -117,13 +117,14 @@ All providers are configured via environment variables. Local defaults apply whe
 
 | Env var | Default | Options |
 |---------|---------|---------|
-| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` |
+| `LLM_PROVIDER` | `llama` | `llama` \| `openrouter` \| `ollama` \| `openai` |
 | `LLAMA_BASE` | `http://127.0.0.1:8080/v1` | any llama.cpp endpoint |
 | `LLAMA_MODEL` | `Qwen3-8B-Q8_0.gguf` | model loaded on server |
 | `OPENROUTER_API_KEY` | — | your OpenRouter API key |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4-20250514` | any OpenRouter model ID |
 | `OLLAMA_BASE` | `http://localhost:11434` | any Ollama endpoint |
 | `OLLAMA_MODEL` | `llama3.2` | any Ollama model |
+| `OPENAI_API_KEY` | — | required for `openai` LLM provider |
 
 ### STT providers
 
@@ -167,6 +168,24 @@ STT_PROVIDER=whispercpp npm start
 STT_PROVIDER=whispercpp WHISPER_MODEL=medium WHISPER_MODEL_PATH=/path/to/ggml-medium.bin npm start
 ```
 
+## Runtime switching
+
+Providers and models can be changed mid-session by voice. Say any of:
+
+- `"switch LLM to OpenAI"`
+- `"use OpenRouter for thinking"`
+- `"set TTS to local"`
+- `"change STT to whisper"`
+- `"switch model to claude"` (changes model within current LLM provider)
+
+| Category | Recognized providers |
+|----------|---------------------|
+| LLM | llama.cpp, OpenRouter, Ollama, OpenAI |
+| STT | Qwen3-ASR (local), whisper.cpp, OpenAI Whisper |
+| TTS | Kokoro (local), OpenAI TTS |
+
+Voice switching updates the provider and model dynamically — no restart needed. The provider names in the status bar reflect changes immediately.
+
 ## CLI flags
 
 | Flag | Default | Description |
@@ -196,6 +215,7 @@ src/
 │   └── log-panel.tsx          # Last log entry at the bottom
 └── lib/
     ├── agent.ts               # Async agent loop (orchestrates LLM/STT/TTS)
+    ├── runtime-config.ts      # Runtime provider/model switching (voice-activated)
     ├── config.ts              # Environment variable bindings
     ├── types.ts               # Shared types (Status, Message, AgentState)
     ├── beeps.ts               # WAV generation + afplay helper
@@ -216,6 +236,7 @@ Adding a new provider for any layer requires:
 1. Create a class implementing the interface (`LlmProvider`, `SttProvider`, or `TtsProvider`)
 2. Add the env var to `config.ts`
 3. Register it in the factory function (the `switch` statement)
+4. Add an option entry in `src/lib/runtime-config.ts` with a provider alias for voice switching
 
 Interfaces are minimal:
 

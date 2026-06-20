@@ -1,11 +1,12 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { AgentOptions, AgentState, Status, Message } from './types.js';
+import type { AgentOptions, AgentState, Status } from './types.js';
 import { PATHS, GREETINGS } from './config.js';
 import { ensureBeeps } from './beeps.js';
 import { listenOnce, getSttProvider } from './listener.js';
 import { speakChunked, getTtsProvider } from './speaker.js';
 import { getLlmProvider } from './llm.js';
+import { parseSwitchCommand, applySwitch } from './runtime-config.js';
 
 const execFile = promisify(execFileCb);
 
@@ -37,7 +38,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   if (!opts.noWarmup) {
     pushLog('Warming up ASR…');
     notify();
-    if (getSttProvider().name.startsWith('local')) {
+    const sttName = getSttProvider().name;
+    if (sttName.startsWith('local') || sttName.startsWith('Qwen')) {
       await execFile('bash', [PATHS.LISTEN_SH, 'qwen3', '--warmup'], { timeout: 120_000 });
     }
     pushLog('ASR ready');
@@ -45,7 +47,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
     pushLog('Warming up TTS…');
     notify();
-    if (getTtsProvider().name.startsWith('local')) {
+    const ttsName = getTtsProvider().name;
+    if (ttsName.startsWith('local') || ttsName.startsWith('Kokoro')) {
       const out = `/tmp/_shodan_warmup_${process.pid}.wav`;
       try {
         await execFile('bash', [PATHS.SAY_SH, 'warmup', out], { timeout: 90_000 });
@@ -96,6 +99,21 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
         }
 
         consecutiveEmpty = 0;
+
+        // ── Check for runtime switch command ──────────────────────
+        const sw = parseSwitchCommand(transcript);
+        if (sw) {
+          const msg = applySwitch(sw);
+          pushLog(msg);
+          state.conversation = [...state.conversation, { role: 'user', text: transcript }];
+          notify();
+          if (!opts.silent) {
+            speakChunked(`Okay, ${msg}.`, opts.gap ?? 1.2).catch(() => {});
+          }
+          continue;
+        }
+        // ───────────────────────────────────────────────────────────
+
         setSt('thinking');
         pushLog(`[YOU] ${transcript}`);
         state.conversation = [...state.conversation, { role: 'user', text: transcript }];
