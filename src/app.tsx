@@ -246,15 +246,15 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const tooSmall = rows < MIN_ROWS || cols < MIN_COLS;
 
-  let portraitLines = 31;
-  if (rows < 36) portraitLines = 18;
-  if (rows < 27) portraitLines = 13;
+  let portraitLines = 33;
+  if (rows < 36) portraitLines = 20;
+  if (rows < 27) portraitLines = 15;
 
   const showRule = rows >= 25;
 
   const hasOverlay = inputMode.type !== 'none';
   const headerRows = 1 + (showRule ? 1 : 0);
-  const contentRows = rows - headerRows - 2;
+  const contentRows = rows - headerRows - 1;
   const maxChatLines = Math.max(15, contentRows);
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
@@ -295,7 +295,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         </Text>
       )}
 
-      <Box flexDirection="row" flexGrow={1} marginX={1} marginBottom={0}>
+      <Box flexDirection="row" flexGrow={1} marginX={1} overflow="hidden">
         <Box flexShrink={0} marginRight={2}>
           <Portrait animate={state.status === 'speaking'} maxLines={portraitLines} />
         </Box>
@@ -310,7 +310,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         </Box>
       </Box>
 
-      <Box marginX={1}>
+      <Box flexShrink={0} marginX={1}>
         <Text backgroundColor="#1c1c1c">
           <Text color="gray">{'  '}</Text>
           <Text color="yellow" bold>{'>'}</Text>
