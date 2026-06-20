@@ -3,7 +3,6 @@ import { Box, Text, useApp, useInput } from 'ink';
 import StatusBar from './components/status-bar.js';
 import Chat from './components/chat.js';
 import Portrait from './components/portrait.js';
-import CommandInput from './components/command-input.js';
 import CommandMenu from './components/command-menu.js';
 import { useTermSize } from './lib/use-term-size.js';
 import { runAgent } from './lib/agent.js';
@@ -275,9 +274,6 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
     );
   }
 
-  const before = textBuffer.slice(0, textCursor);
-  const after = textBuffer.slice(textCursor);
-
   if (tooSmall) {
     return (
       <Box flexDirection="column" height={rows} alignItems="center" justifyContent="center">
@@ -315,20 +311,23 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
       </Box>
 
       <Box marginX={1}>
-        <CommandInput buffer={textBuffer} cursor={textCursor} width={cols - 2} />
-      </Box>
-
-      <Box marginX={1}>
-        <Text backgroundColor="#1c1c1c" color="gray" dimColor>
-          {'  '}{'Ctrl+C quit | /help commands'.padEnd(cols - 6)}
+        <Text backgroundColor="#1c1c1c">
+          <Text color="gray">{'  '}</Text>
+          <Text color="yellow" bold>{'>'}</Text>
+          <Text color="white"> {textBuffer.slice(0, textCursor)}</Text>
+          <Text color="yellow">█</Text>
+          <Text color="white">{textBuffer.slice(textCursor)}</Text>
+          <Text>{' '.repeat(Math.max(0, cols - 4 - textBuffer.length))}</Text>
         </Text>
+        <Text backgroundColor="#1c1c1c" color="gray" dimColor>
+          {'  Ctrl+C quit | /help commands'.padEnd(cols - 2)}
+        </Text>
+        {feedbackMsg && (
+          <Text backgroundColor="#1c1c1c" color="green">
+            {'  '}{feedbackMsg.padEnd(cols - 4)}
+          </Text>
+        )}
       </Box>
-
-      {feedbackMsg && (
-        <Box marginX={1}>
-          <Text backgroundColor="#1c1c1c" color="green">{feedbackMsg.padEnd(cols - 2)}</Text>
-        </Box>
-      )}
     </Box>
   );
 }
