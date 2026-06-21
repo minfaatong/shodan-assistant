@@ -30,10 +30,10 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   };
 
   let shutdown = false;
-  let paused = false;
   let pendingText: string | null = null;
   let speechAbortController: AbortController | null = null;
   let bargeAbortController: AbortController | null = null;
+  let lastActivity = Date.now();
   const notify = () => opts.onStateChange({ ...state });
 
   ensureBeeps();
@@ -70,7 +70,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
   notify();
 
   let reGreetTurn = 0;
-  let consecutiveEmpty = 0;
+  const RE_GREET_MS = 30_000;
 
   (async function loop() {
     while (!shutdown) {
@@ -101,11 +101,11 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
         log('stt', transcript ?? '(null)');
 
-        // ── Handle silence ────────────────────────────────────
+        // ── Handle silence / idle re-greeting ──────────────────
         if (!transcript || transcript === '(no speech detected)') {
-          consecutiveEmpty++;
-          if (consecutiveEmpty >= 10 && !opts.silent) {
-            consecutiveEmpty = 0;
+          const idle = Date.now() - lastActivity;
+          if (idle >= RE_GREET_MS && !opts.silent) {
+            lastActivity = Date.now();
             const g = GREETINGS[reGreetTurn % GREETINGS.length];
             reGreetTurn++;
             notify();
@@ -114,7 +114,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
           continue;
         }
 
-        consecutiveEmpty = 0;
+        lastActivity = Date.now();
 
         // ── Check for runtime switch command ──────────────────
         const sw = parseSwitchCommand(transcript);
@@ -147,10 +147,10 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
       shutdown = true;
     },
     pause() {
-      paused = true;
+      // No-op: agent loop handles text/voice input natively
     },
     resume() {
-      paused = false;
+      // No-op: agent loop always active when not shutdown
     },
     submitText(text: string) {
       abortListen();
@@ -184,19 +184,27 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
     log('user', text);
 
-    let reply: string | null;
-    try {
-      reply = await getLlmProvider().complete(text);
-    } catch (err) {
-      logError(err, 'LLM complete');
-      const errMsg = `I'm having trouble reaching the LLM server. ${err instanceof Error ? err.message : 'Unknown error'}`;
-      state.conversation = [...state.conversation, { role: 'assistant', text: errMsg }];
-      setSt('listening');
-      notify();
-      if (!opts.silent) {
-        speakChunked(errMsg, opts.gap ?? 1.2).catch(() => {});
+    let reply: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        reply = await getLlmProvider().complete(text);
+        break;
+      } catch (err) {
+        if (attempt === 0 && !shutdown) {
+          log('llm', 'retry after error');
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        logError(err, 'LLM complete');
+        const errMsg = `I'm having trouble reaching the LLM server. ${err instanceof Error ? err.message : 'Unknown error'}`;
+        state.conversation = [...state.conversation, { role: 'assistant', text: errMsg }];
+        setSt('listening');
+        notify();
+        if (!opts.silent) {
+          speakChunked(errMsg, opts.gap ?? 1.2).catch(() => {});
+        }
+        return;
       }
-      return;
     }
     if (shutdown) return;
 

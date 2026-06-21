@@ -1,6 +1,6 @@
 # Shodan Assistant
 
-A voice-only AI assistant that runs on your Mac. Listens, thinks (via local or cloud LLM), and speaks back. Always initiates each conversation turn — never passively waits.
+A voice-only AI assistant that runs on macOS, Linux, and Windows WSL. Listens, thinks (via local or cloud LLM), and speaks back. Always initiates each conversation turn — never passively waits.
 
 *This is a fan project and is not affiliated with or endorsed by Nightdive Studios. SHODAN is a trademark of Nightdive Studios.*
 
@@ -27,8 +27,9 @@ Three independent layers connected by a central agent loop:
 
 ```
 ┌─ STT (Speech-to-Text) ───────────────────────────────┐
-│  Local: listen_stream.sh → Qwen3-ASR (CoreML)        │
-│  Cloud: rec → OpenAI Whisper / Google STT API        │
+│  Local (macOS): listen_stream.sh → Qwen3-ASR (speech)  │
+│  Local (Linux):  arecord/rec → whisper.cpp            │
+│  Cloud:         rec/arecord → OpenAI / Google API     │
 │  1× beep at start, 1× beep at end                    │
 │  Speech detected → transcript → Agent loop            │
 └──────────────────────────────────────────────────────┘
@@ -36,7 +37,7 @@ Three independent layers connected by a central agent loop:
                            ▼
 ┌─ Agent Loop (async) ─────────────────────────────────┐
 │  listenOnce() → queryLlm() → speakChunked()           │
-│  Re-greets every ~20s when idle                      │
+│  Re-greets after 30s idle                            │
 │  Barge-in: voice input during speech cancels TTS     │
 │  Text input: /commands or plain text → agent         │
 │  File logging: ./logs/shodan_log.log                 │
@@ -45,8 +46,9 @@ Three independent layers connected by a central agent loop:
                            ▼
 ┌─ TTS (Text-to-Speech) ───────────────────────────────┐
 │  1× beep before speaking                             │
-│  Local: Kokoro (bf_isabella) via speech CLI          │
-│  Cloud: OpenAI TTS / Google TTS API                  │
+│  Local (macOS): Kokoro via speech CLI                │
+│  Local (Linux):  Kokoro via Python pip (kokoro-tts)  │
+│  Cloud:         OpenAI TTS / Google TTS API          │
 │  Full response sent in one call (no chunking)        │
 └──────────────────────────────────────────────────────┘
 ```
@@ -64,18 +66,52 @@ LLMs, STT, and TTS are interchangeable layers behind a common interface (`LlmPro
 Each provider is a class with a `name` and a single method (`complete()`, `transcribe()`, `speak()`). The factory returns the active instance based on environment variables or runtime config.
 
 ### Why separate shell scripts for STT/TTS?
-`listen_stream.sh` and `say.sh` handle platform-specific audio capture (SoX, afplay) and ML model management (`speech` CLI for Qwen3-ASR / Kokoro). This keeps the TypeScript layer clean — it just spawns processes and reads stdout. Cloud providers bypass the transcription/synthesis steps but still use the same recording/playback infrastructure.
+`listen_stream.sh` and `say.sh` handle platform-specific audio capture (SoX rec / arecord, afplay / aplay) and ML model management (`speech` CLI on macOS, `kokoro-tts` pip package on Linux). The TypeScript layer is platform-agnostic — it detects the OS at runtime and dispatches to the right provider. Cloud providers bypass the transcription/synthesis steps but still use the same recording/playback infrastructure.
 
 ### Why ink over other TUI frameworks?
 Ink provides React components (`Box`, `Text`) with Yoga layout, making it straightforward to build a terminal UI. `useInput` handles keyboard shortcuts, and React state drives the full layout including portrait animation, scrollable chat, and overlay menus for provider/model selection.
 
 ## Prerequisites
 
-### Required (all modes)
-- **Node.js 22+** with npm
-- **SoX** (rec for recording) — `brew install sox`
-- **afplay** (built-in on macOS)
-- **SwitchAudioSource** (mic selection) — `brew install switchaudio-osx`
+### Quick install
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/minfaatong/shodan-assistant/main/scripts/install.sh)
+```
+
+Or after cloning the repo:
+
+```bash
+bash scripts/install.sh
+```
+
+The installer detects your OS and installs all required and recommended dependencies.
+
+### By OS
+
+| Dependency | macOS | Linux (Debian/Ubuntu) | Linux (Arch) | WSL |
+|------------|-------|----------------------|-------------|-----|
+| **Node.js ≥22** | `brew install node` | [nodejs.org](https://nodejs.org) or `apt install nodejs` | `pacman -S nodejs` | Same as Linux |
+| **SoX** (rec) | `brew install sox` | `apt install sox` | `pacman -S sox` | `apt install sox` |
+| **Audio player** | Built-in `afplay` | `apt install alsa-utils` (aplay) | `pacman -S alsa-utils` | Same as Linux |
+| **ffmpeg** | `brew install ffmpeg` | `apt install ffmpeg` | `pacman -S ffmpeg` | Same as Linux |
+| **Python 3 + pip** | `brew install python` | `apt install python3-pip` | `pacman -S python-pip` | Same as Linux |
+| **whisper.cpp** | `brew install cmake` + build | `apt install cmake build-essential` + build | `pacman -S cmake base-devel` + build | Same as Linux |
+| **Mic selection** | `brew install switchaudio-osx` | N/A (`arecord` auto-detects) | N/A | N/A |
+
+### Local STT
+
+| Method | Install | Platform |
+|--------|---------|----------|
+| **speech CLI** (Qwen3-ASR) | `brew install speech` | macOS only |
+| **whisper.cpp** | See [install.sh](scripts/install.sh) or build from source | All platforms |
+
+### Local TTS
+
+| Method | Install | Platform |
+|--------|---------|----------|
+| **speech CLI** (Kokoro) | `brew install speech` | macOS only |
+| **kokoro-tts** (Python) | `pip install kokoro-tts` + [download model](https://huggingface.co/kokoro-tts/kokoro) | All platforms |
 
 ### Local LLM (choose one)
 
