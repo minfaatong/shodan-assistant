@@ -82,9 +82,7 @@ class LinuxLocalTts implements TtsProvider {
     const textFile = tmpTextFile(text);
     const out = tmpFile('wav');
     try {
-      const args = [textFile, out, '--voice', KOKORO_VOICE];
-      if (KOKORO_MODEL_PATH) args.push('--model', KOKORO_MODEL_PATH);
-      if (KOKORO_VOICES_PATH) args.push('--voices', KOKORO_VOICES_PATH);
+      const args = [textFile, out, '--voice', KOKORO_VOICE, '--model', KOKORO_MODEL_PATH, '--voices', KOKORO_VOICES_PATH];
       await execFile('kokoro-tts', args, { signal, timeout: TTS_TIMEOUT });
       if (!signal?.aborted) playAudio(out, 30000);
     } catch (err) {

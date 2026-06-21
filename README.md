@@ -71,23 +71,22 @@ Each provider is a class with a `name` and a single method (`complete()`, `trans
 ### Why ink over other TUI frameworks?
 Ink provides React components (`Box`, `Text`) with Yoga layout, making it straightforward to build a terminal UI. `useInput` handles keyboard shortcuts, and React state drives the full layout including portrait animation, scrollable chat, and overlay menus for provider/model selection.
 
-## Prerequisites
-
-### Quick install
+## Quick start
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/minfaatong/shodan-assistant/main/scripts/install.sh)
+curl -fsSL https://raw.githubusercontent.com/minfaatong/shodan-assistant/main/scripts/install.sh | bash
 ```
 
-Or after cloning the repo:
+That's it. The script detects your OS, installs all system dependencies (sox, ffmpeg, Python, whisper.cpp, Kokoro TTS models), then runs `npm install -g shodan-assistant`. After completion, just run:
 
 ```bash
-bash scripts/install.sh
+shodan
+
+# Or quiet mode — log only, no spoken output
+shodan --silent
 ```
 
-The installer detects your OS and installs all required and recommended dependencies.
-
-### By OS
+### Dependencies
 
 | Dependency | macOS | Linux (Debian/Ubuntu) | Linux (Arch) | WSL |
 |------------|-------|----------------------|-------------|-----|
@@ -111,7 +110,7 @@ The installer detects your OS and installs all required and recommended dependen
 | Method | Install | Platform |
 |--------|---------|----------|
 | **speech CLI** (Kokoro) | `brew install speech` | macOS only |
-| **kokoro-tts** (Python) | `pip install kokoro-tts` + [download model](https://huggingface.co/kokoro-tts/kokoro) | All platforms |
+| **kokoro-tts** (Python) | `pip install kokoro-tts` (model auto-downloaded by install.sh) | All platforms |
 
 ### Local LLM (choose one)
 
@@ -171,21 +170,7 @@ brew install speech
 | DeepSeek | https://platform.deepseek.com/ | `DEEPSEEK_API_KEY` |
 | Google Cloud STT/TTS | https://console.cloud.google.com/ | `GOOGLE_API_KEY` |
 
-## Installation
-
-### Quick install (recommended)
-
-```bash
-npm install -g shodan-assistant
-```
-
-This installs the `shodan` command globally. After setting up prerequisites (see below), run:
-
-```bash
-shodan
-```
-
-### From source
+## From source
 
 ```bash
 git clone https://github.com/minfaatong/shodan-assistant
@@ -202,16 +187,6 @@ npm link && shodan
 
 # Or directly with tsx during development
 npm start
-```
-
-## Quick start
-
-```bash
-# Make sure prerequisites are set up first (LLM server, STT/TTS tools)
-shodan
-
-# Quiet mode — log only, no spoken output
-shodan --silent
 ```
 
 ## Configuration

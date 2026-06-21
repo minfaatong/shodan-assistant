@@ -1,9 +1,13 @@
 #!/bin/bash
 # shodan-assistant — cross-platform dependency installer
-# Detects OS, installs required packages, builds binaries, and
-# generates supporting assets (beep WAVs).
+# Detects OS, installs required packages (sox, ffmpeg, Python,
+# kokoro-tts, whisper.cpp), and downloads Kokoro TTS models.
 #
-# Usage: bash scripts/install.sh [--help]
+# Works standalone — Node.js is optional (only needed to run
+# the app itself, not for installing dependencies).
+#
+# One-liner: curl -fsSL https://raw.githubusercontent.com/minfaatong/\
+#   shodan-assistant/main/scripts/install.sh | bash
 #
 # Flags:
 #   --no-beeps   Skip beep WAV generation (for headless/containers)
@@ -39,19 +43,18 @@ case "$(uname -s)" in
   CYGWIN*|MINGW*|MSYS*) OS="wsl" ;;
 esac
 
-# ── Check Node.js >= 22 ──────────────────────────────────────────
-check_node() {
+# ── Check Node.js availability (optional) ────────────────────────
+check_node_optional() {
   if ! which node &>/dev/null; then
-    fail "Node.js not found. Install Node.js >= 22 first:\n" \
-         "  macOS: brew install node\n" \
-         "  Linux: https://nodejs.org/en/download/package-manager"
+    warn "Node.js not found — install later to run shodan-assistant"
+    return
   fi
   local v
   v=$(node -e 'process.stdout.write(process.versions.node)')
   local major
   major=$(echo "$v" | cut -d. -f1)
   if [ "$major" -lt 22 ]; then
-    fail "Node.js >= 22 required (found v$v). Upgrade first."
+    warn "Node.js >= 22 recommended (found v$v). Upgrade or use npx."
   fi
   info "Node.js v$v"
 }
@@ -181,28 +184,41 @@ download_whisper_model() {
   info "Model downloaded to ${model_file}"
 }
 
-# ── Download Kokoro ONNX model ─────────────────────────────────────
+ # ── Download Kokoro ONNX model ─────────────────────────────────────
 download_kokoro_models() {
   local model_dir="${HOME}/.local/share/kokoro"
   local model_file="${model_dir}/kokoro-v1.0.onnx"
   local voices_file="${model_dir}/voices-v1.0.bin"
+  local base_url="https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0"
 
-  if [ -f "$model_file" ] && [ -f "$voices_file" ]; then
-    info "Kokoro models already cached"
-    return
+  mkdir -p "$model_dir"
+
+  if [ ! -f "$model_file" ]; then
+    warn "Downloading Kokoro ONNX model (90 MB)..."
+    cmd curl -fsSL "${base_url}/kokoro-v1.0.onnx" -o "$model_file"
+    info "Model downloaded to ${model_file}"
+  else
+    info "Kokoro ONNX model already cached"
   fi
 
-  if [ ! -f "$model_file" ] || [ ! -f "$voices_file" ]; then
-    warn "Kokoro TTS model files not found at ${model_dir}"
-    warn "Download them manually from:"
-    warn "  https://huggingface.co/kokoro-tts/kokoro"
-    warn "Then set env vars:"
-    warn "  KOKORO_MODEL_PATH=/path/to/kokoro-v1.0.onnx"
-    warn "  KOKORO_VOICES_PATH=/path/to/voices-v1.0.bin"
+  if [ ! -f "$voices_file" ]; then
+    warn "Downloading Kokoro voices (2 MB)..."
+    cmd curl -fsSL "${base_url}/voices-v1.0.bin" -o "$voices_file"
+    info "Voices downloaded to ${voices_file}"
+  else
+    info "Kokoro voices already cached"
   fi
 }
 
-# ── Generate beep WAVs ─────────────────────────────────────────────
+# ── Generate beep WAVs (only if Node available) ──────────────────
+generate_beeps_if_possible() {
+  if ! which node &>/dev/null; then
+    info "Skipping beep generation (app generates them on startup)"
+    return
+  fi
+  generate_beeps
+}
+
 generate_beeps() {
   if [ "$NO_BEEPS" = true ]; then
     info "Skipping beep generation (--no-beeps)"
@@ -265,13 +281,26 @@ verify() {
   fi
 }
 
+# ── npm install ─────────────────────────────────────────────────────
+install_npm() {
+  if ! which npm &>/dev/null; then
+    warn "npm not found — skipping npm install. Install manually:\n" \
+         "  npm install -g shodan-assistant"
+    return
+  fi
+  info "Installing shodan-assistant from npm..."
+  cmd npm install -g shodan-assistant 2>/dev/null || {
+    warn "npm install failed. Run manually:\n  npm install -g shodan-assistant"
+    return
+  }
+  info "shodan-assistant installed globally. Run: shodan"
+}
+
 # ── Main ────────────────────────────────────────────────────────────
 echo ""
 echo "  shodan-assistant — dependency installer"
 echo "  OS: $OS"
 echo ""
-
-check_node
 
 case "$OS" in
   macos) install_macos  ;;
@@ -280,5 +309,7 @@ case "$OS" in
   *)     fail "Unsupported OS: $(uname -s). Supported: macOS, Linux, WSL" ;;
 esac
 
-generate_beeps
+generate_beeps_if_possible
 verify
+check_node_optional
+install_npm

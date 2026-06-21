@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { env } from 'node:process';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,9 +48,11 @@ export type TtsProviderType = 'local' | 'openai' | 'google';
 export const TTS_PROVIDER = (env.TTS_PROVIDER ?? 'local') as TtsProviderType;
 export const OPENAI_TTS_VOICE = env.OPENAI_TTS_VOICE ?? 'alloy';
 
+const KOKORO_DIR = join(homedir(), '.local', 'share', 'kokoro');
+
 export const KOKORO_VOICE = env.KOKORO_VOICE ?? 'bf_isabella';
-export const KOKORO_MODEL_PATH = env.KOKORO_MODEL_PATH ?? '';
-export const KOKORO_VOICES_PATH = env.KOKORO_VOICES_PATH ?? '';
+export const KOKORO_MODEL_PATH = env.KOKORO_MODEL_PATH ?? join(KOKORO_DIR, 'kokoro-v1.0.onnx');
+export const KOKORO_VOICES_PATH = env.KOKORO_VOICES_PATH ?? join(KOKORO_DIR, 'voices-v1.0.bin');
 
 // ── Shared API keys ────────────────────────────────────────────────
 
