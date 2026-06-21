@@ -53,6 +53,7 @@ class LocalTts implements TtsProvider {
         signal,
         timeout: TTS_TIMEOUT,
       });
+      if (!signal?.aborted) playAudio(out, 30000);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       logError(err, 'TTS');
