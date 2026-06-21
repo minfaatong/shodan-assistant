@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput } from 'ink';
 import StatusBar from './components/status-bar.js';
 import Chat from './components/chat.js';
 import Portrait from './components/portrait.js';
+import CommandInput from './components/command-input.js';
 import CommandMenu from './components/command-menu.js';
 import { useTermSize } from './lib/use-term-size.js';
 import { runAgent } from './lib/agent.js';
@@ -21,9 +22,8 @@ const INITIAL: AgentState = {
   logs: [],
 };
 
-type Popup =
-  | null
-  | { type: 'message'; text: string }
+type InputMode =
+  | { type: 'none' }
   | { type: 'menu'; def: MenuDef; cursor: number }
   | { type: 'keyinput'; buffer: string; cursor: number; prompt: string; onSubmit: (value: string) => CommandResult };
 
@@ -39,12 +39,20 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   const { exit } = useApp();
   const ctrlRef = useRef<AgentController | null>(null);
   const { rows, cols } = useTermSize();
-  const [popup, setPopup] = useState<Popup>(null);
+  const [inputMode, setInputMode] = useState<InputMode>({ type: 'none' });
   const [chatScrollOffset, setChatScrollOffset] = useState(0);
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [textBuffer, setTextBuffer] = useState('');
   const [textCursor, setTextCursor] = useState(0);
   const inputRef = useRef({ buffer: '', cursor: 0 });
   const pendingQueue = useRef<string[]>([]);
+
+  const showFeedback = useCallback((msg: string) => {
+    setFeedbackMsg(msg);
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedbackMsg(null), 5000);
+  }, []);
 
   useEffect(() => {
     runAgent({
@@ -61,24 +69,22 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
     return () => {
       ctrlRef.current?.shutdown();
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     };
-  }, []);
-
-  const dismissPopup = useCallback(() => {
-    setPopup(null);
   }, []);
 
   function handleCommandResult(result: CommandResult) {
     switch (result.type) {
       case 'done':
-        setPopup({ type: 'message', text: result.message });
+        showFeedback(result.message);
+        setInputMode({ type: 'none' });
         ctrlRef.current?.resume();
         break;
       case 'menu':
-        setPopup({ type: 'menu', def: result.menu, cursor: 0 });
+        setInputMode({ type: 'menu', def: result.menu, cursor: 0 });
         break;
       case 'keyinput':
-        setPopup({ type: 'keyinput', buffer: '', cursor: 0, prompt: result.prompt, onSubmit: result.onSubmit });
+        setInputMode({ type: 'keyinput', buffer: '', cursor: 0, prompt: result.prompt, onSubmit: result.onSubmit });
         break;
       case 'quit':
         ctrlRef.current?.shutdown();
@@ -100,70 +106,88 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
   }
 
   useInput((input, key) => {
-    // Popup overlay has priority
-    if (popup) {
+    if (inputMode.type === 'menu') {
       if (key.escape) {
-        dismissPopup();
+        setInputMode({ type: 'none' });
         return;
       }
-      if (popup.type === 'menu') {
-        if (key.upArrow) {
-          setPopup({ ...popup, cursor: Math.max(0, popup.cursor - 1) });
-          return;
-        }
-        if (key.downArrow) {
-          setPopup({ ...popup, cursor: Math.min(popup.def.items.length - 1, popup.cursor + 1) });
-          return;
-        }
-        if (key.return) {
-          const result = popup.def.onSelect(popup.cursor);
-          handleCommandResult(result);
-          return;
-        }
+      if (key.upArrow) {
+        setInputMode((prev) =>
+          prev.type === 'menu'
+            ? { ...prev, cursor: Math.max(0, prev.cursor - 1) }
+            : prev,
+        );
         return;
       }
-      if (popup.type === 'keyinput') {
-        if (key.return) {
-          const value = popup.buffer.trim();
-          if (value) {
-            const result = popup.onSubmit(value);
-            handleCommandResult(result);
-          } else {
-            dismissPopup();
-          }
-          return;
-        }
-        if (key.leftArrow) {
-          setPopup({ ...popup, cursor: Math.max(0, popup.cursor - 1) });
-          return;
-        }
-        if (key.rightArrow) {
-          setPopup({ ...popup, cursor: Math.min(popup.buffer.length, popup.cursor + 1) });
-          return;
-        }
-        if (key.backspace) {
-          if (popup.cursor > 0) {
-            const buf = popup.buffer.slice(0, popup.cursor - 1) + popup.buffer.slice(popup.cursor);
-            setPopup({ ...popup, buffer: buf, cursor: popup.cursor - 1 });
-          }
-          return;
-        }
-        if (input) {
-          const buf = popup.buffer.slice(0, popup.cursor) + input + popup.buffer.slice(popup.cursor);
-          setPopup({ ...popup, buffer: buf, cursor: popup.cursor + 1 });
-          return;
-        }
+      if (key.downArrow) {
+        setInputMode((prev) =>
+          prev.type === 'menu'
+            ? { ...prev, cursor: Math.min(prev.def.items.length - 1, prev.cursor + 1) }
+            : prev,
+        );
         return;
       }
-      if (popup.type === 'message') {
-        // Any key dismisses
-        dismissPopup();
+      if (key.return) {
+        const result = inputMode.def.onSelect(inputMode.cursor);
+        handleCommandResult(result);
         return;
       }
       return;
     }
 
-    // Text input mode — read/write inputRef for latest values across batched callbacks
+    if (inputMode.type === 'keyinput') {
+      if (key.escape) {
+        setInputMode({ type: 'none' });
+        return;
+      }
+      if (key.return) {
+        const value = inputMode.buffer.trim();
+        if (value) {
+          const result = inputMode.onSubmit(value);
+          handleCommandResult(result);
+        } else {
+          showFeedback('No input entered, cancelled');
+          setInputMode({ type: 'none' });
+        }
+        return;
+      }
+      if (key.leftArrow) {
+        setInputMode((prev) =>
+          prev.type === 'keyinput'
+            ? { ...prev, cursor: Math.max(0, prev.cursor - 1) }
+            : prev,
+        );
+        return;
+      }
+      if (key.rightArrow) {
+        setInputMode((prev) =>
+          prev.type === 'keyinput'
+            ? { ...prev, cursor: Math.min(prev.buffer.length, prev.cursor + 1) }
+            : prev,
+        );
+        return;
+      }
+      if (key.backspace) {
+        setInputMode((prev) => {
+          if (prev.type !== 'keyinput') return prev;
+          if (prev.cursor <= 0) return prev;
+          const buf = prev.buffer.slice(0, prev.cursor - 1) + prev.buffer.slice(prev.cursor);
+          return { ...prev, buffer: buf, cursor: prev.cursor - 1 };
+        });
+        return;
+      }
+      if (input) {
+        setInputMode((prev) => {
+          if (prev.type !== 'keyinput') return prev;
+          const buf = prev.buffer.slice(0, prev.cursor) + input + prev.buffer.slice(prev.cursor);
+          return { ...prev, buffer: buf, cursor: prev.cursor + 1 };
+        });
+        return;
+      }
+      return;
+    }
+
+    // Text input mode (none) — read/write inputRef for latest values across batched callbacks
     if (input === '\x03') {
       ctrlRef.current?.shutdown();
       exit();
@@ -235,36 +259,25 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
 
   const providerLabel = `LLM:${getLlmProvider().name} STT:${getSttProvider().name} TTS:${getTtsProvider().name}`;
 
-  let popupContent: React.ReactNode = null;
-  if (popup) {
-    if (popup.type === 'menu') {
-      popupContent = (
-        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
-          <CommandMenu def={popup.def} cursor={popup.cursor} />
-        </Box>
-      );
-    } else if (popup.type === 'keyinput') {
-      popupContent = (
-        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text>
-            <Text color="yellow">{popup.prompt} </Text>
-            <Text>{popup.buffer.slice(0, popup.cursor)}</Text>
-            <Text color="yellow">█</Text>
-            <Text>{popup.buffer.slice(popup.cursor)}</Text>
-            <Text dimColor>{popup.buffer.length === 0 ? '(type and press ⏎)' : ''}</Text>
-          </Text>
-        </Box>
-      );
-    } else if (popup.type === 'message') {
-      popupContent = (
-        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
-          {popup.text.split('\n').map((line, i) => (
-            <Text key={i}>{line}</Text>
-          ))}
-        </Box>
-      );
-    }
+  const hasOverlay = inputMode.type !== 'none';
+
+  let overlayContent: React.ReactNode = null;
+  if (inputMode.type === 'menu') {
+    overlayContent = <CommandMenu def={inputMode.def} cursor={inputMode.cursor} />;
+  } else if (inputMode.type === 'keyinput') {
+    overlayContent = (
+      <Text>
+        <Text color="yellow">{inputMode.prompt} </Text>
+        <Text>{inputMode.buffer.slice(0, inputMode.cursor)}</Text>
+        <Text color="yellow">█</Text>
+        <Text>{inputMode.buffer.slice(inputMode.cursor)}</Text>
+        <Text dimColor>{inputMode.buffer.length === 0 ? '(type and press ⏎)' : ''}</Text>
+      </Text>
+    );
   }
+
+  const before = textBuffer.slice(0, textCursor);
+  const after = textBuffer.slice(textCursor);
 
   if (tooSmall) {
     return (
@@ -287,7 +300,7 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
         </Text>
       )}
 
-      <Box flexDirection="row" flexGrow={1} marginX={1} overflow="hidden">
+      <Box flexDirection="row" flexGrow={1} marginX={1} marginBottom={0}>
         <Box flexShrink={0} marginRight={2}>
           <Portrait animate={state.status === 'speaking'} maxLines={portraitLines} />
         </Box>
@@ -297,26 +310,18 @@ export default function App({ intro, gap, silent, noWarmup }: Props) {
             maxLines={maxChatLines}
             scrollOffset={chatScrollOffset}
             onScroll={setChatScrollOffset}
+            footer={hasOverlay ? overlayContent : undefined}
           />
         </Box>
       </Box>
 
-      <Box flexShrink={0} marginX={1}>
-        <Text backgroundColor="#1c1c1c">
-          <Text color="gray">{'  '}</Text>
-          <Text color="yellow" bold>{'>'}</Text>
-          <Text color="white"> {textBuffer.slice(0, textCursor)}</Text>
-          <Text color="yellow">█</Text>
-          <Text color="white">{textBuffer.slice(textCursor)}</Text>
-        </Text>
-        <Text backgroundColor="#1c1c1c" color="gray" dimColor>
-          {'  Ctrl+C quit | /help commands'}
-        </Text>
+      <Box marginX={1} marginBottom={1}>
+        <CommandInput buffer={textBuffer} cursor={textCursor} width={cols - 2} />
       </Box>
 
-      {popupContent && (
-        <Box position="absolute" width={cols} height={rows} alignItems="center" justifyContent="center">
-          {popupContent}
+      {feedbackMsg && (
+        <Box marginX={1} marginBottom={1}>
+          <Text backgroundColor="#1c1c1c" color="green">{feedbackMsg.padEnd(cols - 2)}</Text>
         </Box>
       )}
     </Box>
