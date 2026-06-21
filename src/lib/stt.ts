@@ -1,12 +1,13 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createReadStream, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import {
   PATHS, OPENAI_API_KEY, GOOGLE_API_KEY,
   WHISPER_MODEL_PATH as ENV_WHISPER_MODEL_PATH,
   WHISPER_LANG,
+  WHISPER_MODEL,
 } from './config.js';
 import { getSttProviderType, getWhisperModel, getApiKey } from './runtime-config.js';
 
@@ -27,16 +28,50 @@ async function recordOnly(signal?: AbortSignal): Promise<string> {
   return (stdout ?? '').trim();
 }
 
-// ── Local (Qwen3-ASR via listen_stream.sh) ─────────────────────────
+// ── Local (platform-aware) ──────────────────────────────────────────
+
+function defaultModelPath(): string {
+  return join(homedir(), '.cache', 'whisper-cpp', `ggml-${WHISPER_MODEL}.bin`);
+}
 
 class LocalStt implements SttProvider {
-  name = 'local (Qwen3-ASR)';
+  get name(): string {
+    return platform() === 'darwin' ? 'local (Qwen3-ASR)' : 'local (whisper.cpp)';
+  }
 
   async transcribe(signal?: AbortSignal): Promise<string> {
-    const { stdout } = await execFile('bash', [PATHS.LISTEN_SH, 'qwen3'], {
+    if (platform() === 'darwin') {
+      // macOS: use speech CLI via listen_stream.sh
+      const { stdout } = await execFile('bash', [PATHS.LISTEN_SH, 'qwen3'], {
+        signal,
+        timeout: 120_000,
+      });
+      return (stdout ?? '').trim();
+    }
+
+    // Linux/WSL: record, then transcribe with whisper-cli
+    const { stdout: wavPath } = await execFile('bash', [PATHS.LISTEN_SH, 'whisper', '--record-only'], {
       signal,
       timeout: 120_000,
     });
+    const wav = (wavPath ?? '').trim();
+    if (!wav) return '';
+
+    const modelPath = ENV_WHISPER_MODEL_PATH || defaultModelPath();
+    if (!existsSync(modelPath)) {
+      throw new Error(
+        `whisper.cpp model not found at ${modelPath}. ` +
+        `Set WHISPER_MODEL_PATH or download the "${WHISPER_MODEL}" model.`,
+      );
+    }
+
+    const { stdout } = await execFile('whisper-cli', [
+      '-m', modelPath,
+      '-f', wav,
+      '-l', WHISPER_LANG,
+      '-np', '-nt',
+    ], { signal, timeout: 120_000 });
+
     return (stdout ?? '').trim();
   }
 }

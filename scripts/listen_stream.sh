@@ -20,6 +20,19 @@ else
   PLAYER="ffplay"
 fi
 
+# ── Detect recording tool ─────────────────────────────────────────
+if which rec &>/dev/null; then
+  REC_CMD="rec"
+elif which arecord &>/dev/null; then
+  REC_CMD="arecord"
+else
+  REC_CMD="rec"  # hope it's in PATH
+fi
+
+# ── Detect whether speech CLI is available (macOS local) ──────────
+SPEECH_AVAILABLE=false
+which speech &>/dev/null && SPEECH_AVAILABLE=true
+
 # ── Config ─────────────────────────────────────────────────────────
 WARMUP=false
 RECORD_ONLY=false
@@ -41,15 +54,20 @@ BEEP_END="/tmp/beep_end.wav"
 
 if $WARMUP; then
     # Warmup only — preload ASR model without recording
-    # Use a tiny in-memory WAV to actually load the model
-    speech transcribe "$BEEP_START" 2>/dev/null || true
+    if $SPEECH_AVAILABLE; then
+      speech transcribe "$BEEP_START" 2>/dev/null || true
+    fi
     exit 0
 fi
 
 # Beep → recording starts
 "$PLAYER" "$BEEP_START" 2>/dev/null || true
 
-rec -q -c 1 -b 16 "$OUTPUT" silence 1 0.3 3% 1 2.0 3% 2>/dev/null
+if [ "$REC_CMD" = "arecord" ]; then
+  arecord -q -c 1 -r 16000 -f S16_LE -d 5 "$OUTPUT" 2>/dev/null
+else
+  rec -q -c 1 -b 16 "$OUTPUT" silence 1 0.3 3% 1 2.0 3% 2>/dev/null
+fi
 
 # Beep → recording stopped
 "$PLAYER" "$BEEP_END" 2>/dev/null || true
@@ -67,7 +85,13 @@ case "$ENGINE" in
     RESULT=$(tail -1 "${OUTPUT}.txt" 2>/dev/null)
     ;;
   qwen3|parakeet|nemotron|omnilingual)
-    RESULT=$(speech transcribe "$OUTPUT" --engine "$ENGINE" 2>/dev/null | sed -n 's/^Result: //p') || true
+    if $SPEECH_AVAILABLE; then
+      RESULT=$(speech transcribe "$OUTPUT" --engine "$ENGINE" 2>/dev/null | sed -n 's/^Result: //p') || true
+    else
+      # Fallback to whisper when speech CLI is unavailable (Linux)
+      whisper-cli -m "$HOME/.cache/whisper-cpp/ggml-small.bin" -f "$OUTPUT" -otxt 2>/dev/null
+      RESULT=$(tail -1 "${OUTPUT}.txt" 2>/dev/null)
+    fi
     ;;
   *)
     echo "Unknown engine: $ENGINE (use: qwen3, whisper, parakeet, nemotron, omnilingual)"
