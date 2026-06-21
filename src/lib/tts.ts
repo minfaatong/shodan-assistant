@@ -1,10 +1,19 @@
-import { execFile as execFileCb, execFileSync } from 'node:child_process';
+import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
 import { getTtsProviderType, getTtsVoice, getApiKey } from './runtime-config.js';
 import { beepStart } from './beeps.js';
 import { logError } from './logger.js';
+import { playAudio } from './audio-player.js';
+
+function tmpFile(ext: string): string {
+  const dir = join(tmpdir(), 'shodan');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return join(dir, `tts_${process.pid}_${Date.now()}.${ext}`);
+}
 
 const execFile = promisify(execFileCb);
 
@@ -27,12 +36,8 @@ function quickClip(text: string): boolean {
   if (!clip) return false;
   const path = `${PATHS.QUICK_DIR}/${clip}_slow.wav`;
   if (!existsSync(path)) return false;
-  try {
-    execFileSync('afplay', [path], { timeout: 5000, stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  playAudio(path, 5000);
+  return true;
 }
 
 // ── Local (Kokoro via say.sh) ──────────────────────────────────────
@@ -42,7 +47,7 @@ class LocalTts implements TtsProvider {
 
   async speak(text: string, signal?: AbortSignal): Promise<void> {
     if (!text) return;
-    const out = `/tmp/_shodan_tts_${process.pid}.wav`;
+    const out = tmpFile('wav');
     try {
       await execFile('bash', [PATHS.SAY_SH, text, out], {
         signal,
@@ -88,11 +93,11 @@ class OpenAiTts implements TtsProvider {
     }
 
     const buf = Buffer.from(await res.arrayBuffer());
-    const out = `/tmp/_shodan_tts_${process.pid}.mp3`;
+    const out = tmpFile('mp3');
     writeFileSync(out, buf);
 
     try {
-      execFileSync('afplay', [out], { timeout: 30000, stdio: 'ignore' });
+      playAudio(out, 30000);
     } finally {
       try { unlinkSync(out); } catch {}
     }
@@ -135,11 +140,11 @@ class GoogleTts implements TtsProvider {
     if (!data.audioContent) throw new Error('Google TTS: empty response');
 
     const buf = Buffer.from(data.audioContent, 'base64');
-    const out = `/tmp/_shodan_tts_${process.pid}.mp3`;
+    const out = tmpFile('mp3');
     writeFileSync(out, buf);
 
     try {
-      execFileSync('afplay', [out], { timeout: 30000, stdio: 'ignore' });
+      playAudio(out, 30000);
     } finally {
       try { unlinkSync(out); } catch {}
     }

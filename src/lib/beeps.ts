@@ -1,11 +1,19 @@
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { dirname } from 'node:path';
 import { PATHS } from './config.js';
+import { playAudio } from './audio-player.js';
 
 const SR = 22050;
 
+function ensureDir(path: string): void {
+  const d = dirname(path);
+  if (!existsSync(d)) mkdirSync(d, { recursive: true });
+}
+
 function generateWav(path: string, freq: number, dur: number): void {
   if (existsSync(path)) return;
+  ensureDir(path);
   const n = Math.floor(SR * dur);
   const samples = Buffer.alloc(n * 2);
   for (let i = 0; i < n; i++) {
@@ -35,24 +43,18 @@ export function ensureBeeps(): void {
   generateWav(PATHS.BEEP_END, 660, 0.10);
 }
 
-function afplay(path: string): void {
-  try {
-    execFileSync('afplay', [path], { timeout: 3000, stdio: 'ignore' });
-  } catch {}
-}
-
 export function beepStart(): void {
-  afplay(PATHS.BEEP_START);
+  playAudio(PATHS.BEEP_START, 3000);
 }
 
 export function beepEnd(): void {
-  afplay(PATHS.BEEP_END);
+  playAudio(PATHS.BEEP_END, 3000);
 }
 
 export function beepEndDouble(): void {
-  afplay(PATHS.BEEP_END);
+  playAudio(PATHS.BEEP_END, 3000);
   try {
     execFileSync('sleep', ['0.15'], { stdio: 'ignore' });
   } catch {}
-  afplay(PATHS.BEEP_END);
+  playAudio(PATHS.BEEP_END, 3000);
 }

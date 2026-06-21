@@ -1,5 +1,8 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import type { AgentOptions, AgentState, Status } from './types.js';
 import { PATHS, GREETINGS } from './config.js';
 import { ensureBeeps } from './beeps.js';
@@ -44,11 +47,13 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
     const ttsName = getTtsProvider().name;
     if (ttsName.startsWith('local') || ttsName.startsWith('Kokoro')) {
-      const out = `/tmp/_shodan_warmup_${process.pid}.wav`;
+      const dir = join(tmpdir(), 'shodan');
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const out = join(dir, `warmup_${process.pid}.wav`);
       try {
         await execFile('bash', [PATHS.SAY_SH, 'warmup', out], { timeout: 90_000 });
       } finally {
-        try { await execFile('rm', ['-f', out]); } catch {}
+        try { unlinkSync(out); } catch {}
       }
     }
   }

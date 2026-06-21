@@ -9,6 +9,18 @@
 
 set -euo pipefail
 
+# ── Detect platform audio player ──────────────────────────────────
+if [[ "$(uname)" == "Darwin" ]]; then
+  PLAYER="afplay"
+elif which aplay &>/dev/null; then
+  PLAYER="aplay"
+elif which paplay &>/dev/null; then
+  PLAYER="paplay"
+else
+  PLAYER="ffplay"
+fi
+
+# ── Config ─────────────────────────────────────────────────────────
 WARMUP=false
 RECORD_ONLY=false
 ENGINE="qwen3"
@@ -35,12 +47,12 @@ if $WARMUP; then
 fi
 
 # Beep → recording starts
-afplay "$BEEP_START" 2>/dev/null || true
+"$PLAYER" "$BEEP_START" 2>/dev/null || true
 
 rec -q -c 1 -b 16 "$OUTPUT" silence 1 0.3 3% 1 2.0 3% 2>/dev/null
 
 # Beep → recording stopped
-afplay "$BEEP_END" 2>/dev/null || true
+"$PLAYER" "$BEEP_END" 2>/dev/null || true
 
 if $RECORD_ONLY; then
     echo "$OUTPUT"
