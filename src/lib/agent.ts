@@ -47,13 +47,15 @@ export async function runAgent(opts: AgentOptions): Promise<AgentController> {
 
     const ttsName = getTtsProvider().name;
     if (ttsName.startsWith('local') || ttsName.startsWith('Kokoro')) {
-      const dir = join(tmpdir(), 'shodan');
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      const out = join(dir, `warmup_${process.pid}.wav`);
-      try {
-        await execFile('bash', [PATHS.SAY_SH, 'warmup', out], { timeout: 90_000 });
-      } finally {
-        try { unlinkSync(out); } catch {}
+      if (process.platform === 'darwin') {
+        const dir = join(tmpdir(), 'shodan');
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        const out = join(dir, `warmup_${process.pid}.wav`);
+        try {
+          await execFile('bash', [PATHS.SAY_SH, 'warmup', out], { timeout: 90_000 });
+        } finally {
+          try { unlinkSync(out); } catch {}
+        }
       }
     }
   }
