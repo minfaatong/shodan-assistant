@@ -2,8 +2,8 @@ import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT } from './config.js';
+import { tmpdir, platform } from 'node:os';
+import { PATHS, OPENAI_API_KEY, GOOGLE_API_KEY, QUICK_RESPONSES, TTS_TIMEOUT, KOKORO_VOICE, KOKORO_MODEL_PATH, KOKORO_VOICES_PATH } from './config.js';
 import { getTtsProviderType, getTtsVoice, getApiKey } from './runtime-config.js';
 import { beepStart } from './beeps.js';
 import { logError } from './logger.js';
@@ -13,6 +13,14 @@ function tmpFile(ext: string): string {
   const dir = join(tmpdir(), 'shodan');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return join(dir, `tts_${process.pid}_${Date.now()}.${ext}`);
+}
+
+function tmpTextFile(text: string): string {
+  const dir = join(tmpdir(), 'shodan');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const p = join(dir, `prompt_${process.pid}_${Date.now()}.txt`);
+  writeFileSync(p, text);
+  return p;
 }
 
 const execFile = promisify(execFileCb);
@@ -40,10 +48,10 @@ function quickClip(text: string): boolean {
   return true;
 }
 
-// ── Local (Kokoro via say.sh) ──────────────────────────────────────
+// ── Local: macOS (Kokoro via speech CLI) ───────────────────────────
 
-class LocalTts implements TtsProvider {
-  name = 'local (Kokoro bf_isabella)';
+class MacLocalTts implements TtsProvider {
+  get name(): string { return `local (macOS Kokoro ${KOKORO_VOICE})`; }
 
   async speak(text: string, signal?: AbortSignal): Promise<void> {
     if (!text) return;
@@ -52,12 +60,38 @@ class LocalTts implements TtsProvider {
       await execFile('bash', [PATHS.SAY_SH, text, out], {
         signal,
         timeout: TTS_TIMEOUT,
+        env: { ...process.env, KOKORO_VOICE: KOKORO_VOICE },
       });
       if (!signal?.aborted) playAudio(out, 30000);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       logError(err, 'TTS');
     } finally {
+      try { unlinkSync(out); } catch {}
+    }
+  }
+}
+
+// ── Local: Linux (Kokoro via Python kokoro-tts CLI) ────────────────
+
+class LinuxLocalTts implements TtsProvider {
+  get name(): string { return `local (Linux Kokoro ${KOKORO_VOICE})`; }
+
+  async speak(text: string, signal?: AbortSignal): Promise<void> {
+    if (!text) return;
+    const textFile = tmpTextFile(text);
+    const out = tmpFile('wav');
+    try {
+      const args = [textFile, out, '--voice', KOKORO_VOICE];
+      if (KOKORO_MODEL_PATH) args.push('--model', KOKORO_MODEL_PATH);
+      if (KOKORO_VOICES_PATH) args.push('--voices', KOKORO_VOICES_PATH);
+      await execFile('kokoro-tts', args, { signal, timeout: TTS_TIMEOUT });
+      if (!signal?.aborted) playAudio(out, 30000);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      logError(err, 'TTS');
+    } finally {
+      try { unlinkSync(textFile); } catch {}
       try { unlinkSync(out); } catch {}
     }
   }
@@ -154,6 +188,11 @@ class GoogleTts implements TtsProvider {
 
 // ── Factory (always reads runtime config) ─────────────────────
 
+function getLocalTts(): TtsProvider {
+  if (platform() === 'darwin') return new MacLocalTts();
+  return new LinuxLocalTts();
+}
+
 export function getTtsProvider(): TtsProvider {
   const type = getTtsProviderType();
 
@@ -163,7 +202,7 @@ export function getTtsProvider(): TtsProvider {
     case 'google':
       return new GoogleTts(getTtsVoice());
     default:
-      return new LocalTts();
+      return getLocalTts();
   }
 }
 

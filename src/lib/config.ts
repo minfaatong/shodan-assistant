@@ -48,6 +48,10 @@ export type TtsProviderType = 'local' | 'openai' | 'google';
 export const TTS_PROVIDER = (env.TTS_PROVIDER ?? 'local') as TtsProviderType;
 export const OPENAI_TTS_VOICE = env.OPENAI_TTS_VOICE ?? 'alloy';
 
+export const KOKORO_VOICE = env.KOKORO_VOICE ?? 'bf_isabella';
+export const KOKORO_MODEL_PATH = env.KOKORO_MODEL_PATH ?? '';
+export const KOKORO_VOICES_PATH = env.KOKORO_VOICES_PATH ?? '';
+
 // ── Shared API keys ────────────────────────────────────────────────
 
 export const OPENAI_API_KEY = env.OPENAI_API_KEY ?? '';

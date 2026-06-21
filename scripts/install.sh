@@ -77,6 +77,9 @@ install_macos() {
 
   # whisper.cpp
   install_whisper_cpp
+
+  # Kokoro models
+  download_kokoro_models
 }
 
 # ── Linux (apt/pacman/dnf) ────────────────────────────────────────
@@ -103,6 +106,7 @@ install_linux() {
 
   install_python_deps
   install_whisper_cpp
+  download_kokoro_models
 }
 
 # ── WSL ────────────────────────────────────────────────────────────
@@ -175,6 +179,27 @@ download_whisper_model() {
   local url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${model_size}.bin"
   cmd curl -fsSL "$url" -o "$model_file"
   info "Model downloaded to ${model_file}"
+}
+
+# ── Download Kokoro ONNX model ─────────────────────────────────────
+download_kokoro_models() {
+  local model_dir="${HOME}/.local/share/kokoro"
+  local model_file="${model_dir}/kokoro-v1.0.onnx"
+  local voices_file="${model_dir}/voices-v1.0.bin"
+
+  if [ -f "$model_file" ] && [ -f "$voices_file" ]; then
+    info "Kokoro models already cached"
+    return
+  fi
+
+  if [ ! -f "$model_file" ] || [ ! -f "$voices_file" ]; then
+    warn "Kokoro TTS model files not found at ${model_dir}"
+    warn "Download them manually from:"
+    warn "  https://huggingface.co/kokoro-tts/kokoro"
+    warn "Then set env vars:"
+    warn "  KOKORO_MODEL_PATH=/path/to/kokoro-v1.0.onnx"
+    warn "  KOKORO_VOICES_PATH=/path/to/voices-v1.0.bin"
+  fi
 }
 
 # ── Generate beep WAVs ─────────────────────────────────────────────

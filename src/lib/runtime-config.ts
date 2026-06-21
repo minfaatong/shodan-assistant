@@ -5,6 +5,7 @@ import {
   WHISPER_MODEL,
   TTS_PROVIDER as ENV_TTS_PROVIDER,
   OPENAI_TTS_VOICE,
+  KOKORO_VOICE,
   OPENAI_API_KEY,
   OPENROUTER_API_KEY,
   CLOUDFLARE_API_KEY,
@@ -79,7 +80,13 @@ export const STT_PROVIDER_OPTIONS: ProviderOption[] = [
 ];
 
 export const TTS_PROVIDER_OPTIONS: ProviderOption[] = [
-  { id: 'local', label: 'Kokoro (local)' },
+  { id: 'local', label: 'Kokoro (local)', models: [
+    { id: 'bf_isabella', label: 'bf_isabella (female)' },
+    { id: 'bf_alice', label: 'bf_alice (female)' },
+    { id: 'bf_emma', label: 'bf_emma (female)' },
+    { id: 'am_adam', label: 'am_adam (male)' },
+    { id: 'am_michael', label: 'am_michael (male)' },
+  ] },
   { id: 'openai', label: 'OpenAI TTS (cloud)', models: [
     { id: 'alloy', label: 'Alloy' },
     { id: 'echo', label: 'Echo' },
@@ -138,7 +145,7 @@ function initSelections(): RuntimeSelections {
   return {
     llm: { provider: ENV_LLM_PROVIDER, model: resolveDefaultLlmModel(ENV_LLM_PROVIDER) },
     stt: { provider: ENV_STT_PROVIDER, model: ENV_STT_PROVIDER === 'whispercpp' ? WHISPER_MODEL : undefined },
-    tts: { provider: ENV_TTS_PROVIDER, model: ENV_TTS_PROVIDER === 'openai' ? OPENAI_TTS_VOICE : ENV_TTS_PROVIDER === 'google' ? 'en-US-Neural2-D' : undefined },
+    tts: { provider: ENV_TTS_PROVIDER, model: ENV_TTS_PROVIDER === 'openai' ? OPENAI_TTS_VOICE : ENV_TTS_PROVIDER === 'google' ? 'en-US-Neural2-D' : ENV_TTS_PROVIDER === 'local' ? KOKORO_VOICE : undefined },
   };
 }
 
@@ -291,5 +298,5 @@ export function getTtsProviderType(): TtsProviderType {
 }
 
 export function getTtsVoice(): string {
-  return _current.tts.model ?? 'alloy';
+  return _current.tts.model ?? KOKORO_VOICE;
 }

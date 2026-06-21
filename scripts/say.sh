@@ -1,11 +1,12 @@
 #!/bin/bash
-# say.sh - Synthesize speech with Kokoro TTS
+# say.sh - Synthesize speech with Kokoro TTS (macOS speech CLI)
 # Usage: ./say.sh "text to speak" [output.wav]
-# Output defaults to /tmp/shodan_speech.wav if not provided
+# Voice: KOKORO_VOICE env var (default: bf_isabella)
 
 set -euo pipefail
 
 TEXT="${1:?Usage: say.sh <text> [output]}"
 OUTPUT="${2:-/tmp/shodan_speech.wav}"
+VOICE="${KOKORO_VOICE:-bf_isabella}"
 
-speech kokoro "$TEXT" --voice bf_isabella --output "$OUTPUT" 2>/dev/null
+speech kokoro "$TEXT" --voice "$VOICE" --output "$OUTPUT" 2>/dev/null
